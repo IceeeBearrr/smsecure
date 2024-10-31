@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:smsecure/Pages/OTPVerification/OtpVerification.dart';
 
 class Forgotpassword extends StatelessWidget {
   const Forgotpassword ({Key? key}) : super(key: key);
@@ -10,7 +11,7 @@ class Forgotpassword extends StatelessWidget {
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            padding: const EdgeInsets.symmetric(horizontal: 30.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -78,7 +79,10 @@ class Forgotpassword extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 30.0),
                   child: ElevatedButton(
                     onPressed: () {
-                      // Add OTP sending logic here
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const OtpVerification()),
+                      );
                     },
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
