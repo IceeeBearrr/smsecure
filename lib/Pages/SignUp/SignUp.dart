@@ -14,8 +14,9 @@ class Signup extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const SizedBox(height: 70),
                 const Padding(
-                  padding: EdgeInsets.only(top: 70.0),
+                  padding: EdgeInsets.only(bottom: 10.0),
                   child: Text(
                     'Get Started',
                     style: TextStyle(
@@ -27,18 +28,15 @@ class Signup extends StatelessWidget {
                   ),
                 ),
                 const Padding(
-                  padding: EdgeInsets.only(bottom: 10.0),
+                  padding: EdgeInsets.only(bottom: 50.0),
                   child: Text(
-                    'by creating a free account.',
+                    'by creating a free account',
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.grey,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 50.0),
                 ),
 
                 // Full Name Field
@@ -82,6 +80,7 @@ class Signup extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 20.0),
                   child: TextField(
+                    keyboardType: TextInputType.phone,
                     decoration: InputDecoration(
                       labelText: 'Phone number',
                       labelStyle: const TextStyle(color: Colors.black38),

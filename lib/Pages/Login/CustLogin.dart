@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:smsecure/Pages/SignUp/SignUp.dart';
+import 'package:smsecure/Pages/ForgotPassword/ForgotPassword.dart';
 
 class Custlogin extends StatelessWidget {
   const Custlogin({super.key});
@@ -21,7 +22,7 @@ class Custlogin extends StatelessWidget {
                   "Welcome back",
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 24,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold,
                     color: Colors.black87,
                   ),
@@ -80,14 +81,18 @@ class Custlogin extends StatelessWidget {
                 ),
               ),
 
+
               // Forgot Password
               Align(
                 alignment: Alignment.centerRight,
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 30.0),
-                  child: TextButton(
-                    onPressed: () {
-                      // Navigate to Forgot Password page
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const Forgotpassword()),
+                      );
                     },
                     child: const Text(
                       "Forgot Password?",
