@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:smsecure/Pages/Home/Widget/RecentChats.dart';
 import 'package:telephony/telephony.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart';
+import 'package:smsecure/Pages/CustomNavigationBar.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  const HomePage({Key? key}) : super(key: key);
 
   @override
   _HomePageState createState() => _HomePageState();
@@ -299,8 +299,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-
-
+  
   static String generateConversationID(String? address) {
     if (address == null || address.isEmpty) return "unknown";
     String cleanAddress = address.replaceAll(RegExp(r'[^\w]+'), '');
@@ -326,70 +325,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: const Drawer(),
-      appBar: AppBar(
-        actions: const [
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 15),
-            child: Icon(Icons.notifications),
-          ),
-        ],
+      appBar: AppBar(title: const Text("Home")),
+      body: const Center(
+        child: Text("Welcome to Home Page"),
       ),
-      body: ListView(
-        children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 25, horizontal: 20),
-            child: Text(
-              "Messages",
-              style: TextStyle(
-                color: Color(0xFF113953),
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 15),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.5),
-                    blurRadius: 10,
-                    spreadRadius: 2,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  SizedBox(
-                    width: 300,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 15),
-                      child: TextFormField(
-                        decoration: const InputDecoration(
-                          hintText: "Search",
-                          border: InputBorder.none,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const Icon(
-                    Icons.search,
-                    color: Color(0xFF113953),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const Recentchats(),
-        ],
-      ),
+      bottomNavigationBar: const Customnavigationbar(),
     );
   }
+
 }

@@ -3,6 +3,8 @@ import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:line_icons/line_icons.dart';
 import 'package:smsecure/Pages/Home/HomePage.dart';
 import 'package:smsecure/Pages/Contact/ContactPage.dart';
+import 'package:smsecure/Pages/Messages/Messages.dart';
+import 'package:smsecure/Pages/Profile/Profile.dart';
 
 class Customnavigationbar extends StatefulWidget {
   const Customnavigationbar({super.key});
@@ -17,8 +19,8 @@ class _CustomnavigationbarState extends State<Customnavigationbar> {
   static final List<Widget> _widgetOptions = <Widget>[
     const HomePage(),
     const Contactpage(),
-    const Contactpage(),
-    const Contactpage(),
+    const Messages(),
+    const Profile(),
   ];
 
 

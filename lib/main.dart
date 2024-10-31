@@ -1,9 +1,10 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smsecure/Pages/Home/HomePage.dart';
-import 'package:smsecure/Pages/CustomNavigationBar.dart';
 import 'package:smsecure/firebase_options.dart';
 import 'package:telephony/telephony.dart';
+import 'package:smsecure/Pages/Login/CustLogin.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,8 +22,25 @@ void main() async {
   }
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+class _MyAppState extends State<MyApp> {
+  late Future<bool> _isLoggedIn;
+
+  @override
+  void initState() {
+    super.initState();
+    _isLoggedIn = _checkLoginStatus();
+  }
+
+  Future<bool> _checkLoginStatus() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('isLoggedIn') ?? false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,11 +53,20 @@ class MyApp extends StatelessWidget {
           foregroundColor: Color(0xFF113953),
         ),
       ),
-      initialRoute: '/',
-      routes: {
-        "/": (context) => const Customnavigationbar(),
-        "/home": (context) => const HomePage(),
-      },
+      home: FutureBuilder<bool>(
+        future: _isLoggedIn,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          } else {
+            if (snapshot.data == true) {
+              return const HomePage(); 
+            } else {
+              return const Custlogin(); 
+            }
+          }
+        },
+      ),
     );
   }
 }

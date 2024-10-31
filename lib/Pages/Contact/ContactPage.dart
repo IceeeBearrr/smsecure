@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:smsecure/Pages/CustomNavigationBar.dart';
 
 class Contactpage extends StatefulWidget {
   const Contactpage({super.key});
@@ -148,6 +149,7 @@ class _ContactpageState extends State<Contactpage> {
           ),
         ],
       ),
+      bottomNavigationBar: const Customnavigationbar(),
     );
   }
 }
