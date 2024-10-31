@@ -2,20 +2,43 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:custom_clippers/custom_clippers.dart';
 
-class Chat extends StatelessWidget {
+class Chat extends StatefulWidget {
   final String conversationID;
 
   const Chat({super.key, required this.conversationID});
+
+  @override
+  _ChatState createState() => _ChatState();
+}
+
+class _ChatState extends State<Chat> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  // Scroll to bottom function
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('conversations')
-          .doc(conversationID)
+          .doc(widget.conversationID)
           .collection('messages')
           .orderBy('timestamp', descending: false)
-          .snapshots(), // Changed to ascending order
+          .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -23,8 +46,11 @@ class Chat extends StatelessWidget {
 
         var messages = snapshot.data!.docs;
 
+        // Scroll to bottom whenever new data is loaded
+        Future.delayed(Duration.zero, () => _scrollToBottom());
+
         return ListView.builder(
-          reverse: false, // Changed to show the latest messages at the bottom
+          controller: _scrollController,
           itemCount: messages.length,
           itemBuilder: (context, index) {
             var message = messages[index];
@@ -66,5 +92,11 @@ class Chat extends StatelessWidget {
         );
       },
     );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 }

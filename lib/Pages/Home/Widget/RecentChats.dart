@@ -5,10 +5,21 @@ import 'package:intl/intl.dart';
 
 class Recentchats extends StatelessWidget {
   const Recentchats({super.key});
+  
+  final String currentUserID = "+6011-55050925"; // Set this to the current user's phone number
 
   String formatDate(Timestamp timestamp) {
     DateTime date = timestamp.toDate();
-    return DateFormat('d MMM').format(date);
+    DateTime now = DateTime.now();
+    DateTime yesterday = now.subtract(Duration(days: 1));
+
+    if (DateFormat('yyyy-MM-dd').format(date) == DateFormat('yyyy-MM-dd').format(now)) {
+      return DateFormat('HH:mm').format(date); // Shows time if the conversation is from today
+    } else if (DateFormat('yyyy-MM-dd').format(date) == DateFormat('yyyy-MM-dd').format(yesterday)) {
+      return 'Yesterday'; // Shows 'Yesterday' if the conversation is from the day before
+    } else {
+      return DateFormat('d MMM').format(date); // Shows the date for older conversations
+    }
   }
 
   @override
@@ -50,7 +61,8 @@ class Recentchats extends StatelessWidget {
             itemCount: conversations.length,
             itemBuilder: (context, index) {
               var conversation = conversations[index];
-              var receiverID = conversation['receiverID'] ?? 'Unknown';
+              var participants = List<String>.from(conversation['participants']);
+              var otherUserID = participants.firstWhere((id) => id != currentUserID, orElse: () => 'Unknown');
               var lastMessageTimeStamp = conversation['lastMessageTimeStamp'];
               var formattedDate = lastMessageTimeStamp != null
                   ? formatDate(lastMessageTimeStamp)
@@ -89,7 +101,7 @@ class Recentchats extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  receiverID,
+                                  otherUserID, // Show other user's ID
                                   style: const TextStyle(
                                     fontSize: 18,
                                     color: Color(0xFF113953),
