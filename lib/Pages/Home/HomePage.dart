@@ -204,11 +204,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           }
         }
 
-        await Future.delayed(Duration(minutes: 1));
+        await Future.delayed(const Duration(minutes: 1));
       } catch (e, stackTrace) {
         print('Error polling sent messages: $e');
         print('Stack trace: $stackTrace');
-        await Future.delayed(Duration(minutes: 1));
+        await Future.delayed(const Duration(minutes: 1));
       }
     }
   }
@@ -317,7 +317,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     List<int> bytes = utf8.encode(body);
     String bodyHash = base64UrlEncode(bytes);
 
-    String messageID = '${timestamp}_$address\_$bodyHash';
+    String messageID = '${timestamp}_${address}_$bodyHash';
     messageID = messageID.replaceAll('/', '_');
 
     return messageID;
