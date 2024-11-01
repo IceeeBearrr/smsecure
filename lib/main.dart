@@ -22,25 +22,8 @@ void main() async {
   }
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
-  @override
-  State<MyApp> createState() => _MyAppState();
-}
-class _MyAppState extends State<MyApp> {
-  late Future<bool> _isLoggedIn;
-
-  @override
-  void initState() {
-    super.initState();
-    _isLoggedIn = _checkLoginStatus();
-  }
-
-  Future<bool> _checkLoginStatus() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('isLoggedIn') ?? false;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,20 +36,43 @@ class _MyAppState extends State<MyApp> {
           foregroundColor: Color(0xFF113953),
         ),
       ),
-      home: FutureBuilder<bool>(
-        future: _isLoggedIn,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else {
-            if (snapshot.data == true) {
-              return const HomePage(); 
-            } else {
-              return const Custlogin(); 
-            }
-          }
-        },
-      ),
+      home: _decideInitialScreen(),
     );
+  }
+
+  Widget _decideInitialScreen() {
+    return FutureBuilder<bool>(
+      future: _isLoggedIn(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasData && snapshot.data == true) {
+          return FutureBuilder<String?>(
+            future: _getUserID(),
+            builder: (context, userIdSnapshot) {
+              if (userIdSnapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              } else if (userIdSnapshot.hasData && userIdSnapshot.data != null) {
+                return HomePage(userID: userIdSnapshot.data!);
+              } else {
+                return const Custlogin();
+              }
+            },
+          );
+        } else {
+          return const Custlogin();
+        }
+      },
+    );
+  }
+
+  Future<bool> _isLoggedIn() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('isLoggedIn') ?? false;
+  }
+
+  Future<String?> _getUserID() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getString('userID');
   }
 }

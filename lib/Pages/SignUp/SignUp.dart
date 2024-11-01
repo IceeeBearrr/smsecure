@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:smsecure/Pages/OTPVerification/OTPVerification.dart';
+import 'package:smsecure/Pages/SignUp/OtpVerificationSignUp.dart';
 
 class Signup extends StatefulWidget {
   const Signup({Key? key}) : super(key: key);
@@ -34,20 +34,39 @@ class _SignupState extends State<Signup> {
       final phone = phoneController.text.trim();
       final password = passwordController.text;
 
-      // Pass user information to OTPVerification page
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OtpVerification(
-            name: name,
-            email: email,
-            phone: phone,
-            password: password,
+      // Check if the phone number or email already exists in Firestore
+      final QuerySnapshot emailCheck = await FirebaseFirestore.instance
+          .collection('smsUser')
+          .where('emailAddress', isEqualTo: email)
+          .get();
+
+      final QuerySnapshot phoneCheck = await FirebaseFirestore.instance
+          .collection('smsUser')
+          .where('phoneNo', isEqualTo: phone)
+          .get();
+
+      if (emailCheck.docs.isNotEmpty || phoneCheck.docs.isNotEmpty) {
+        _showErrorDialog('An account with this email or phone number already exists.');
+        Future.delayed(const Duration(seconds: 2), () {
+          Navigator.pop(context); // Redirect to the login page
+        });
+      } else {
+        // Proceed to OTP verification if no existing account was found
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OtpVerificationSignUp(
+              name: name,
+              email: email,
+              phone: phone,
+              password: password,
+            ),
           ),
-        ),
-      );
+        );
+      }
     }
   }
+
 
   void _showErrorDialog(String message) {
     showDialog(
@@ -110,6 +129,7 @@ class _SignupState extends State<Signup> {
                       controller: nameController,
                       decoration: InputDecoration(
                         labelText: 'Full name',
+                        labelStyle: const TextStyle(color: Colors.black38),
                         prefixIcon: const Icon(Icons.person_outline, color: Colors.black38),
                         filled: true,
                         fillColor: Colors.grey[100],
@@ -136,6 +156,7 @@ class _SignupState extends State<Signup> {
                       controller: emailController,
                       decoration: InputDecoration(
                         labelText: 'Email',
+                        labelStyle: const TextStyle(color: Colors.black38),
                         prefixIcon: const Icon(Icons.email, color: Colors.black38),
                         filled: true,
                         fillColor: Colors.grey[100],
@@ -164,6 +185,7 @@ class _SignupState extends State<Signup> {
                       keyboardType: TextInputType.phone,
                       decoration: InputDecoration(
                         labelText: 'Phone number',
+                        labelStyle: const TextStyle(color: Colors.black38),
                         prefixIcon: const Icon(Icons.phone, color: Colors.black38),
                         filled: true,
                         fillColor: Colors.grey[100],
@@ -176,8 +198,8 @@ class _SignupState extends State<Signup> {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your phone number';
                         }
-                        if (!RegExp(r'^\+?\d{10,15}$').hasMatch(value)) {
-                          return 'Please enter a valid phone number';
+                        if (!RegExp(r'^\+60\d{9,10}$').hasMatch(value)) {
+                          return 'Please enter in the format +60123456789';
                         }
                         return null;
                       },
@@ -192,6 +214,7 @@ class _SignupState extends State<Signup> {
                       obscureText: !_isPasswordVisible,
                       decoration: InputDecoration(
                         labelText: 'Password',
+                        labelStyle: const TextStyle(color: Colors.black38),
                         prefixIcon: const Icon(Icons.lock, color: Colors.black38),
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -245,6 +268,7 @@ class _SignupState extends State<Signup> {
                       obscureText: !_isConfirmPasswordVisible,
                       decoration: InputDecoration(
                         labelText: 'Confirm Password',
+                        labelStyle: const TextStyle(color: Colors.black38),
                         prefixIcon: const Icon(Icons.lock, color: Colors.black38),
                         suffixIcon: IconButton(
                           icon: Icon(

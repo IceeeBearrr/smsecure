@@ -1,9 +1,67 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:smsecure/Pages/SignUp/SignUp.dart';
 import 'package:smsecure/Pages/ForgotPassword/ForgotPassword.dart';
+import 'package:smsecure/Pages/Login/OtpVerificationCustLogin.dart'; // Assuming this is the location of OTPVerificationCustLogin
 
-class Custlogin extends StatelessWidget {
+class Custlogin extends StatefulWidget {
   const Custlogin({super.key});
+
+  @override
+  _CustloginState createState() => _CustloginState();
+}
+
+class _CustloginState extends State<Custlogin> {
+  final TextEditingController phoneController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  bool _isPasswordVisible = false;
+
+  Future<void> _loginUser() async {
+    if (_formKey.currentState!.validate()) {
+      final String phone = phoneController.text.trim();
+      final String password = passwordController.text;
+
+      // Query Firestore to check for matching credentials
+      final QuerySnapshot result = await FirebaseFirestore.instance
+          .collection('smsUser')
+          .where('phoneNo', isEqualTo: phone)
+          .where('password', isEqualTo: password)
+          .get();
+
+      if (result.docs.isEmpty) {
+        // Show error if no matching document is found
+        _showErrorDialog('Invalid phone number or password. Please try again.');
+      } else {
+        // Redirect to OTP verification screen if login is successful
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OtpVerificationCustLogin(
+              phone: phone,
+              password: password,
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Login Failed'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12,149 +70,180 @@ class Custlogin extends StatelessWidget {
       body: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 30),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-               const Padding(
-                padding: EdgeInsets.only(bottom: 10.0),
-                child: Text(
-                  "Welcome back",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
-
-              const Padding(
-                padding: EdgeInsets.only(bottom: 40.0),
-                child: Text(
-                  "sign in to access your account",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.black54,
-                  ),
-                ),
-              ),
-
-              // Phone Number Input
-              Padding(
-                padding: const EdgeInsets.only(bottom: 20.0),
-                child: TextField(
-                  keyboardType: TextInputType.phone,
-                  decoration: InputDecoration(
-                    labelText: "Enter your phone number",
-                    labelStyle: const TextStyle(color: Colors.black38),
-                    prefixIcon: const Icon(Icons.phone, color: Colors.black38),
-                    filled: true,
-                    fillColor: Colors.grey[100],
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 10.0),
+                  child: Text(
+                    "Welcome back",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
                     ),
                   ),
                 ),
-              ),
-
-              // Password Input
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10.0),
-                child: TextField(
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: "Password",
-                    labelStyle: const TextStyle(color: Colors.black38),
-                    prefixIcon: const Icon(Icons.lock, color: Colors.black38),
-                    suffixIcon:
-                        const Icon(Icons.visibility_off, color: Colors.black38),
-                    filled: true,
-                    fillColor: Colors.grey[100],
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-              ),
-
-
-              // Forgot Password
-              Align(
-                alignment: Alignment.centerRight,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 30.0),
-                  child: GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const Forgotpassword()),
-                      );
-                    },
-                    child: const Text(
-                      "Forgot Password?",
-                      style: TextStyle(
-                        color: Color.fromARGB(255, 47, 77, 129),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              // Next Button
-              Padding(
-                padding: const EdgeInsets.only(bottom: 20.0),
-                child: ElevatedButton(
-                  onPressed: () {
-                    // Login logic
-                  },
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    backgroundColor: const Color.fromARGB(255, 47, 77, 129),
-                  ),
-                  child: const Text(
-                    "Next   >",
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 40.0),
+                  child: Text(
+                    "Sign in to access your account",
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 16,
-                      color: Colors.white,
+                      color: Colors.black54,
                     ),
                   ),
                 ),
-              ),
 
-              // Register Link
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    "New Member? ",
-                    style: TextStyle(color: Colors.black54),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const Signup()),
-                      );
+                // Phone Number Input
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20.0),
+                  child: TextFormField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      labelText: "Enter your phone number",
+                      labelStyle: const TextStyle(color: Colors.black38),
+                      prefixIcon: const Icon(Icons.phone, color: Colors.black38),
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your phone number';
+                      }
+                      if (!RegExp(r'^\+60\d{9,10}$').hasMatch(value)) {
+                        return 'Please enter in the format +60123456789';
+                      }
+                      return null;
                     },
-                    child: const Text(
-                      "Register now",
-                      style: TextStyle(
-                        color: Color.fromARGB(255, 47, 77, 129),
-                        fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                // Password Input
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10.0),
+                  child: TextFormField(
+                    controller: passwordController,
+                    obscureText: !_isPasswordVisible,
+                    decoration: InputDecoration(
+                      labelText: "Password",
+                      labelStyle: const TextStyle(color: Colors.black38),
+                      prefixIcon: const Icon(Icons.lock, color: Colors.black38),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _isPasswordVisible
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                          color: Colors.black38,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _isPasswordVisible = !_isPasswordVisible;
+                          });
+                        },
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your password';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+
+                // Forgot Password
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 30.0),
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const Forgotpassword(),
+                          ),
+                        );
+                      },
+                      child: const Text(
+                        "Forgot Password?",
+                        style: TextStyle(
+                          color: Color.fromARGB(255, 47, 77, 129),
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ),
-                ],
-              ),
-            ],
+                ),
+
+                // Next Button
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20.0),
+                  child: ElevatedButton(
+                    onPressed: _loginUser,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      backgroundColor: const Color.fromARGB(255, 47, 77, 129),
+                    ),
+                    child: const Text(
+                      "Next   >",
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Register Link
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      "New Member? ",
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const Signup(),
+                          ),
+                        );
+                      },
+                      child: const Text(
+                        "Register now",
+                        style: TextStyle(
+                          color: Color.fromARGB(255, 47, 77, 129),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

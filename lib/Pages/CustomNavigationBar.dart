@@ -7,7 +7,9 @@ import 'package:smsecure/Pages/Messages/Messages.dart';
 import 'package:smsecure/Pages/Profile/Profile.dart';
 
 class Customnavigationbar extends StatefulWidget {
-  const Customnavigationbar({super.key});
+  final String userID; // Add userID parameter
+
+  const Customnavigationbar({super.key, required this.userID}); // Initialize userID
 
   @override
   State<Customnavigationbar> createState() => _CustomnavigationbarState();
@@ -16,13 +18,13 @@ class Customnavigationbar extends StatefulWidget {
 class _CustomnavigationbarState extends State<Customnavigationbar> {
   int _selectedIndex = 0;
 
-  static final List<Widget> _widgetOptions = <Widget>[
-    const HomePage(),
-    const Contactpage(),
-    const Messages(),
+  // Pass widget.userID to HomePage
+  late final List<Widget> _widgetOptions = <Widget>[
+    HomePage(userID: widget.userID), // Use widget.userID here
+    Contactpage(userID: widget.userID),
+    Messages(userID: widget.userID),
     const Profile(),
   ];
-
 
   @override
   Widget build(BuildContext context) {

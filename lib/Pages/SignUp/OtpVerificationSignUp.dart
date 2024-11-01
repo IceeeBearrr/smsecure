@@ -1,16 +1,18 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:smsecure/Pages/ForgotPassword/SetNewPassword.dart';
+import 'package:twilio_flutter/twilio_flutter.dart';
+import 'package:smsecure/Pages/Login/CustLogin.dart';
 
-class OtpVerification extends StatefulWidget {
+class OtpVerificationSignUp extends StatefulWidget {
   final String name;
   final String email;
   final String phone;
   final String password;
 
-  const OtpVerification({
+  const OtpVerificationSignUp({
     Key? key,
     required this.name,
     required this.email,
@@ -19,19 +21,26 @@ class OtpVerification extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _OtpVerificationState createState() => _OtpVerificationState();
+  _OtpVerificationSignUpState createState() => _OtpVerificationSignUpState();
 }
 
-class _OtpVerificationState extends State<OtpVerification> {
-  final List<TextEditingController> otpControllers = List.generate(6, (index) => TextEditingController());
+class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
+  final List<TextEditingController> otpControllers =
+      List.generate(6, (index) => TextEditingController());
   int _remainingTime = 60;
   late Timer _timer;
   bool _canResend = false;
   String generatedOtp = '';
+  late TwilioFlutter twilioFlutter;
 
   @override
   void initState() {
     super.initState();
+    twilioFlutter = TwilioFlutter(
+      accountSid: 'ACbde03b214375773dc7bd448871cdbb50',
+      authToken: '2fe2aca2c0c733457a6bcb1efbc1e273',
+      twilioNumber: '+12053862557',
+    );
     _startCountdown();
     _sendOtp();
   }
@@ -61,9 +70,23 @@ class _OtpVerificationState extends State<OtpVerification> {
 
   void _sendOtp() {
     setState(() {
-      generatedOtp = '123456'; // Replace this with actual OTP logic
+      generatedOtp = _generateOtp();
     });
-    print('OTP sent to ${widget.phone}: $generatedOtp');
+    twilioFlutter.sendSMS(
+      toNumber: widget.phone,
+      messageBody: 'Your OTP code is: $generatedOtp',
+    ).then((_) {
+      print('OTP sent to ${widget.phone}: $generatedOtp');
+    }).catchError((error, stackTrace) {
+      print('Failed to send OTP. Error: $error');
+      print('StackTrace: $stackTrace');
+      _showErrorDialog('Failed to send OTP. Please try again.');
+    });
+  }
+
+  String _generateOtp() {
+    var rng = Random();
+    return List.generate(6, (_) => rng.nextInt(10).toString()).join();
   }
 
   void _resendCode() {
@@ -78,10 +101,7 @@ class _OtpVerificationState extends State<OtpVerification> {
     String enteredOtp = otpControllers.map((controller) => controller.text).join();
     if (enteredOtp == generatedOtp) {
       await _registerUserInFirestore();
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const SetNewPassword()),
-      );
+      _showSuccessDialog(); // Show success message and redirect to login
     } else {
       _showErrorDialog('Invalid OTP. Please try again.');
     }
@@ -102,6 +122,29 @@ class _OtpVerificationState extends State<OtpVerification> {
       print("Error adding user: $e");
       _showErrorDialog("An error occurred while registering the user. Please try again.");
     }
+  }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Prevents closing by tapping outside the dialog
+      builder: (context) => AlertDialog(
+        title: const Text('Success'),
+        content: const Text('Your account has been created successfully!'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // Close the dialog
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const Custlogin()),
+              ); // Redirect to login page
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showErrorDialog(String message) {

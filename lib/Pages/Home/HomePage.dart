@@ -8,7 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:smsecure/Pages/CustomNavigationBar.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({Key? key}) : super(key: key);
+  final String userID;
+  const HomePage({Key? key, required this.userID}) : super(key: key);
 
   @override
   _HomePageState createState() => _HomePageState();
@@ -325,11 +326,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Home")),
+      appBar: AppBar(title: Text("Welcome ${widget.userID}")),
       body: const Center(
         child: Text("Welcome to Home Page"),
       ),
-      bottomNavigationBar: const Customnavigationbar(),
+      bottomNavigationBar: Customnavigationbar(userID: widget.userID), 
     );
   }
 

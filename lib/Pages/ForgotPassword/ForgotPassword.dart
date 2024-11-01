@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:smsecure/Pages/OTPVerification/OtpVerification.dart';
 
 class Forgotpassword extends StatelessWidget {
   const Forgotpassword ({Key? key}) : super(key: key);

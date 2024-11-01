@@ -4,7 +4,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:smsecure/Pages/CustomNavigationBar.dart';
 
 class Contactpage extends StatefulWidget {
-  const Contactpage({super.key});
+  final String userID;
+
+  const Contactpage({Key? key, required this.userID}) : super(key: key);
 
   @override
   State<Contactpage> createState() => _ContactpageState();
@@ -149,7 +151,7 @@ class _ContactpageState extends State<Contactpage> {
           ),
         ],
       ),
-      bottomNavigationBar: const Customnavigationbar(),
+      bottomNavigationBar: Customnavigationbar(userID: widget.userID),
     );
   }
 }

@@ -3,7 +3,9 @@ import 'package:smsecure/Pages/Messages/Widget/RecentChats.dart';
 import 'package:smsecure/Pages/CustomNavigationBar.dart';
 
 class Messages extends StatelessWidget {
-  const Messages({Key? key}) : super(key: key);
+  final String userID; // Add userID parameter
+
+  const Messages({Key? key, required this.userID}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -72,9 +74,7 @@ class Messages extends StatelessWidget {
           const Recentchats(),
         ],
       ),
-      bottomNavigationBar: const Customnavigationbar(),
+      bottomNavigationBar: Customnavigationbar(userID: userID), // Pass userID here
     );
   }
-
-
 }

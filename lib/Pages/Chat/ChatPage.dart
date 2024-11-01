@@ -7,8 +7,9 @@ import 'package:smsecure/Pages/CustomNavigationBar.dart';
 
 class Chatpage extends StatelessWidget {
   final String conversationID;
+  final String userID;
 
-  const Chatpage({super.key, required this.conversationID});
+  const Chatpage({super.key, required this.conversationID, required this.userID});
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +82,7 @@ class Chatpage extends StatelessWidget {
           ),
         ],
       ),
-      bottomNavigationBar: const Customnavigationbar(),
+      bottomNavigationBar: Customnavigationbar(userID: userID),
     );
   }
 
