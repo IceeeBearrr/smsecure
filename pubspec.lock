@@ -192,14 +192,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  get_it:
-    dependency: transitive
-    description:
-      name: get_it
-      sha256: d85128a5dae4ea777324730dc65edd9c9f43155c109d5cc0a69cab74139fbac1
-      url: "https://pub.dev"
-    source: hosted
-    version: "7.7.0"
   google_nav_bar:
     dependency: "direct main"
     description:
@@ -212,10 +204,10 @@ packages:
     dependency: transitive
     description:
       name: http
-      sha256: b9c29a161230ee03d3ccf545097fccd9b87a5264228c5d348202e0f0c28f9010
+      sha256: "5895291c13fa8a3bd82e76d5627f69e0d85ca6a30dcac95c4ea19a5d555879c2"
       url: "https://pub.dev"
     source: hosted
-    version: "1.2.2"
+    version: "0.13.6"
   http_parser:
     dependency: transitive
     description:
@@ -272,14 +264,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.0"
-  logging:
-    dependency: transitive
-    description:
-      name: logging
-      sha256: "623a88c9594aa774443aa3eb2d41807a48486b5613e67599fb4c41c0ad47c340"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.2.0"
   matcher:
     dependency: transitive
     description:
@@ -521,10 +505,10 @@ packages:
     dependency: "direct main"
     description:
       name: twilio_flutter
-      sha256: "9ae140004609e6eef8474a53997613b29a1549161e6e65b10135aa361193587c"
+      sha256: c81572eb5246d7f522852795f69b36817df62de4746a5e1d9af435d015e5cd25
       url: "https://pub.dev"
     source: hosted
-    version: "0.9.0"
+    version: "0.0.9"
   typed_data:
     dependency: transitive
     description:

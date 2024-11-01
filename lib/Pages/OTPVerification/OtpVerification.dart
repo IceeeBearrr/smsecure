@@ -1,34 +1,50 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:smsecure/Pages/ForgotPassword/SetNewPassword.dart';
 
 class OtpVerification extends StatefulWidget {
-  const OtpVerification({Key? key}) : super(key: key);
+  final String name;
+  final String email;
+  final String phone;
+  final String password;
+
+  const OtpVerification({
+    Key? key,
+    required this.name,
+    required this.email,
+    required this.phone,
+    required this.password,
+  }) : super(key: key);
 
   @override
   _OtpVerificationState createState() => _OtpVerificationState();
 }
 
 class _OtpVerificationState extends State<OtpVerification> {
-  int _remainingTime = 60; // Initial time for the countdown (in seconds)
+  final List<TextEditingController> otpControllers = List.generate(6, (index) => TextEditingController());
+  int _remainingTime = 60;
   late Timer _timer;
   bool _canResend = false;
+  String generatedOtp = '';
 
   @override
   void initState() {
     super.initState();
     _startCountdown();
+    _sendOtp();
   }
 
   @override
   void dispose() {
-    _timer.cancel(); // Cancel the timer when the widget is disposed
+    _timer.cancel();
+    otpControllers.forEach((controller) => controller.dispose());
     super.dispose();
   }
 
   void _startCountdown() {
-    _canResend = false; // Disable the "Resend" button at the start
+    _canResend = false;
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_remainingTime > 0) {
         setState(() {
@@ -36,18 +52,72 @@ class _OtpVerificationState extends State<OtpVerification> {
         });
       } else {
         setState(() {
-          _canResend = true; // Enable the "Resend" button
-          _timer.cancel(); // Stop the timer
+          _canResend = true;
+          _timer.cancel();
         });
       }
     });
   }
 
+  void _sendOtp() {
+    setState(() {
+      generatedOtp = '123456'; // Replace this with actual OTP logic
+    });
+    print('OTP sent to ${widget.phone}: $generatedOtp');
+  }
+
   void _resendCode() {
     setState(() {
-      _remainingTime = 60; // Reset the countdown
-      _startCountdown(); // Restart the countdown timer
+      _remainingTime = 60;
+      _startCountdown();
+      _sendOtp();
     });
+  }
+
+  Future<void> _verifyOtpAndRegisterUser() async {
+    String enteredOtp = otpControllers.map((controller) => controller.text).join();
+    if (enteredOtp == generatedOtp) {
+      await _registerUserInFirestore();
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const SetNewPassword()),
+      );
+    } else {
+      _showErrorDialog('Invalid OTP. Please try again.');
+    }
+  }
+
+  Future<void> _registerUserInFirestore() async {
+    CollectionReference smsUsers = FirebaseFirestore.instance.collection('smsUser');
+    try {
+      await smsUsers.doc(widget.phone).set({
+        'smsUserID': widget.phone,
+        'name': widget.name,
+        'phoneNo': widget.phone,
+        'emailAddress': widget.email,
+        'password': widget.password,
+      });
+      print("User registered successfully.");
+    } catch (e) {
+      print("Error adding user: $e");
+      _showErrorDialog("An error occurred while registering the user. Please try again.");
+    }
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -76,7 +146,7 @@ class _OtpVerificationState extends State<OtpVerification> {
               const Padding(
                 padding: EdgeInsets.only(bottom: 30.0),
                 child: Text(
-                  "Please enter the 6-digit code sent to your phone number +6016-8422878 for verification.",
+                  "Please enter the 6-digit code sent to your phone number.",
                   style: TextStyle(
                     fontSize: 16,
                     color: Colors.black54,
@@ -93,12 +163,11 @@ class _OtpVerificationState extends State<OtpVerification> {
                       width: 50,
                       height: 55,
                       child: TextField(
+                        controller: otpControllers[index],
                         keyboardType: TextInputType.number,
                         textAlign: TextAlign.center,
                         maxLength: 1,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly
-                        ],
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         decoration: InputDecoration(
                           counterText: "",
                           filled: true,
@@ -108,8 +177,12 @@ class _OtpVerificationState extends State<OtpVerification> {
                             borderSide: BorderSide.none,
                           ),
                         ),
-                        style: const TextStyle(
-                            fontSize: 24, fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                        onChanged: (value) {
+                          if (value.length == 1 && index < 5) {
+                            FocusScope.of(context).nextFocus();
+                          }
+                        },
                       ),
                     );
                   }),
@@ -118,13 +191,7 @@ class _OtpVerificationState extends State<OtpVerification> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 20.0),
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => const SetNewPassword()),
-                    );
-                  },
+                  onPressed: _verifyOtpAndRegisterUser,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     backgroundColor: const Color.fromARGB(255, 47, 77, 129),

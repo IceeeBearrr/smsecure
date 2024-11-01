@@ -1,7 +1,69 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:smsecure/Pages/OTPVerification/OTPVerification.dart';
 
-class Signup extends StatelessWidget {
+class Signup extends StatefulWidget {
   const Signup({Key? key}) : super(key: key);
+
+  @override
+  _SignupState createState() => _SignupState();
+}
+
+class _SignupState extends State<Signup> {
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController phoneController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
+  final TextEditingController confirmPasswordController = TextEditingController();
+  bool termsAccepted = false;
+  final _formKey = GlobalKey<FormState>();
+
+  // State variables to control password visibility
+  bool _isPasswordVisible = false;
+  bool _isConfirmPasswordVisible = false;
+
+  void _registerUser() async {
+    if (_formKey.currentState!.validate()) {
+      if (!termsAccepted) {
+        _showErrorDialog('Please accept the terms and conditions.');
+        return;
+      }
+
+      final name = nameController.text.trim();
+      final email = emailController.text.trim();
+      final phone = phoneController.text.trim();
+      final password = passwordController.text;
+
+      // Pass user information to OTPVerification page
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OtpVerification(
+            name: name,
+            email: email,
+            phone: phone,
+            password: password,
+          ),
+        ),
+      );
+    }
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -11,193 +73,280 @@ class Signup extends StatelessWidget {
         child: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 30.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 70),
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 10.0),
-                  child: Text(
-                    'Get Started',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 70),
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 10.0),
+                    child: Text(
+                      'Get Started',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    textAlign: TextAlign.center,
                   ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 50.0),
-                  child: Text(
-                    'by creating a free account',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey,
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 50.0),
+                    child: Text(
+                      'by creating a free account',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    textAlign: TextAlign.center,
                   ),
-                ),
 
-                // Full Name Field
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 20.0),
-                  child: TextField(
-                    decoration: InputDecoration(
-                      labelText: 'Full name',
-                      labelStyle: const TextStyle(color: Colors.black38),
-                      prefixIcon:
-                          const Icon(Icons.person_outline, color: Colors.black38),
-                      filled: true,
-                      fillColor: Colors.grey[100],
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
+                  // Full Name Field
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 20.0),
+                    child: TextFormField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Full name',
+                        prefixIcon: const Icon(Icons.person_outline, color: Colors.black38),
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter your full name';
+                        } else if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(value)) {
+                          return 'Only letters and spaces are allowed';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+
+                  // Email Field
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 20.0),
+                    child: TextFormField(
+                      controller: emailController,
+                      decoration: InputDecoration(
+                        labelText: 'Email',
+                        prefixIcon: const Icon(Icons.email, color: Colors.black38),
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter your email';
+                        }
+                        if (!RegExp(r'^[\w-]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                          return 'Please enter a valid email address';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+
+                  // Phone Number Field
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 20.0),
+                    child: TextFormField(
+                      controller: phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: InputDecoration(
+                        labelText: 'Phone number',
+                        prefixIcon: const Icon(Icons.phone, color: Colors.black38),
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter your phone number';
+                        }
+                        if (!RegExp(r'^\+?\d{10,15}$').hasMatch(value)) {
+                          return 'Please enter a valid phone number';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+
+                  // Password Field
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 20.0),
+                    child: TextFormField(
+                      controller: passwordController,
+                      obscureText: !_isPasswordVisible,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        prefixIcon: const Icon(Icons.lock, color: Colors.black38),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isPasswordVisible
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                            color: Colors.black38,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isPasswordVisible = !_isPasswordVisible;
+                            });
+                          },
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter a password';
+                        }
+                        if (value.length < 8) {
+                          return 'Password must be at least 8 characters';
+                        }
+                        if (!RegExp(r'[A-Z]').hasMatch(value)) {
+                          return 'Password must contain at least one uppercase letter';
+                        }
+                        if (!RegExp(r'[a-z]').hasMatch(value)) {
+                          return 'Password must contain at least one lowercase letter';
+                        }
+                        if (!RegExp(r'[0-9]').hasMatch(value)) {
+                          return 'Password must contain at least one digit';
+                        }
+                        if (!RegExp(r'[!@#$%^&*(),.?":{}|<>_]').hasMatch(value)) {
+                          return 'Password must contain at least one special character';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+
+                  // Confirm Password Field
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 20.0),
+                    child: TextFormField(
+                      controller: confirmPasswordController,
+                      obscureText: !_isConfirmPasswordVisible,
+                      decoration: InputDecoration(
+                        labelText: 'Confirm Password',
+                        prefixIcon: const Icon(Icons.lock, color: Colors.black38),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isConfirmPasswordVisible
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                            color: Colors.black38,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isConfirmPasswordVisible = !_isConfirmPasswordVisible;
+                            });
+                          },
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please confirm your password';
+                        }
+                        if (value != passwordController.text) {
+                          return 'Passwords do not match';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+
+                  // Terms and Conditions Checkbox
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 30.0),
+                    child: Row(
+                      children: [
+                        Checkbox(
+                          value: termsAccepted,
+                          onChanged: (value) {
+                            setState(() {
+                              termsAccepted = value!;
+                            });
+                          },
+                        ),
+                        const Expanded(
+                          child: Text(
+                            'By checking the box you agree to our Terms and Conditions.',
+                            style: TextStyle(fontSize: 14, color: Colors.grey),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Next Button
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 20.0),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color.fromARGB(255, 47, 77, 129),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: _registerUser,
+                      child: const Text(
+                        'Next   >',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
-                ),
 
-                // Email Field
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 20.0),
-                  child: TextField(
-                    decoration: InputDecoration(
-                      labelText: 'Email',
-                      labelStyle: const TextStyle(color: Colors.black38),
-                      prefixIcon: const Icon(Icons.email, color: Colors.black38),
-                      filled: true,
-                      fillColor: Colors.grey[100],
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Phone Number Field
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 20.0),
-                  child: TextField(
-                    keyboardType: TextInputType.phone,
-                    decoration: InputDecoration(
-                      labelText: 'Phone number',
-                      labelStyle: const TextStyle(color: Colors.black38),
-                      prefixIcon: const Icon(Icons.phone, color: Colors.black38),
-                      filled: true,
-                      fillColor: Colors.grey[100],
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Password Field
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 20.0),
-                  child: TextField(
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      labelStyle: const TextStyle(color: Colors.black38),
-                      prefixIcon: const Icon(Icons.lock, color: Colors.black38),
-                      suffixIcon: const Icon(Icons.visibility_off, color: Colors.black38),
-                      filled: true,
-                      fillColor: Colors.grey[100],
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Confirm Password Field
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 20.0),
-                  child: TextField(
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: 'Confirm Password',
-                      labelStyle: const TextStyle(color: Colors.black38),
-                      prefixIcon: const Icon(Icons.lock, color: Colors.black38),
-                      suffixIcon: const Icon(Icons.visibility_off, color: Colors.black38),
-                      filled: true,
-                      fillColor: Colors.grey[100],
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Terms and Conditions Checkbox
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 30.0),
-                  child: Row(
+                  // Login Link
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Checkbox(value: false, onChanged: (value) {}),
-                      const Expanded(
-                        child: Text(
-                          'By checking the box you agree to our Terms and Conditions.',
-                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                      const Text(
+                        'Already a member? ',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.pop(context); // Navigate back to Login Page
+                        },
+                        child: const Text(
+                          'Log In',
+                          style: TextStyle(
+                            color: Color.fromARGB(255, 47, 77, 129),
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-
-                // Next Button
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 20.0),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color.fromARGB(255, 47, 77, 129),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    onPressed: () {
-                      // Registration logic
-                    },
-                    child: const Text(
-                      'Next   >',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Login Link
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      'Already a member? ',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.pop(context); // Navigate back to Login Page
-                      },
-                      child: const Text(
-                        'Log In',
-                        style: TextStyle(
-                          color: Color.fromARGB(255, 47, 77, 129),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
