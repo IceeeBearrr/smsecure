@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:smsecure/Pages/ForgotPassword/SetNewPassword.dart';
 
 class OtpVerification extends StatefulWidget {
   const OtpVerification({Key? key}) : super(key: key);
@@ -60,9 +61,9 @@ class _OtpVerificationState extends State<OtpVerification> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10.0),
-                child: const Text(
+              const Padding(
+                padding: EdgeInsets.only(bottom: 10.0),
+                child: Text(
                   "Almost there",
                   style: TextStyle(
                     fontSize: 24,
@@ -72,9 +73,9 @@ class _OtpVerificationState extends State<OtpVerification> {
                   textAlign: TextAlign.center,
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 30.0),
-                child: const Text(
+              const Padding(
+                padding: EdgeInsets.only(bottom: 30.0),
+                child: Text(
                   "Please enter the 6-digit code sent to your phone number +6016-8422878 for verification.",
                   style: TextStyle(
                     fontSize: 16,
@@ -118,7 +119,11 @@ class _OtpVerificationState extends State<OtpVerification> {
                 padding: const EdgeInsets.only(bottom: 20.0),
                 child: ElevatedButton(
                   onPressed: () {
-                    // Verify OTP logic
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const SetNewPassword()),
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -149,8 +154,9 @@ class _OtpVerificationState extends State<OtpVerification> {
                     child: Text(
                       "Resend Again",
                       style: TextStyle(
-                        color:
-                            _canResend ? const Color.fromARGB(255, 47, 77, 129) : Colors.grey,
+                        color: _canResend
+                            ? const Color.fromARGB(255, 47, 77, 129)
+                            : Colors.grey,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
