@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:smsecure/Pages/CustomNavigationBar.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+// Initialize Flutter Secure Storage instance
+final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
 
 class Contactpage extends StatefulWidget {
-  final String userID;
-
-  const Contactpage({Key? key, required this.userID}) : super(key: key);
+  const Contactpage({super.key});
 
   @override
   State<Contactpage> createState() => _ContactpageState();
@@ -14,11 +16,19 @@ class Contactpage extends StatefulWidget {
 
 class _ContactpageState extends State<Contactpage> {
   List<Contact> contacts = [];
+  String? userPhone;
 
   @override
   void initState() {
     super.initState();
+    _loadUserPhone(); // Load userPhone from secure storage
     _getAllContacts();
+  }
+
+  Future<void> _loadUserPhone() async {
+    // Read the user phone number from secure storage
+    userPhone = await secureStorage.read(key: 'userPhone');
+    setState(() {}); // Trigger a rebuild to update the UI with the userPhone if needed
   }
 
   Future<void> _getAllContacts() async {
@@ -42,12 +52,12 @@ class _ContactpageState extends State<Contactpage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: const Drawer(), //hamburger icon
+      drawer: const Drawer(), // Hamburger icon
       appBar: AppBar(
         actions: const [
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 15),
-            child: Icon(Icons.notifications), //notification
+            child: Icon(Icons.notifications), // Notification
           ),
         ],
       ),
@@ -64,7 +74,7 @@ class _ContactpageState extends State<Contactpage> {
               ),
             ),
           ),
-          //Search Bar
+          // Search Bar
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 15),
             child: Container(
@@ -104,7 +114,6 @@ class _ContactpageState extends State<Contactpage> {
               ),
             ),
           ),
-
           Container(
             margin: const EdgeInsets.only(top: 20),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 25),
@@ -151,7 +160,7 @@ class _ContactpageState extends State<Contactpage> {
           ),
         ],
       ),
-      bottomNavigationBar: Customnavigationbar(userID: widget.userID),
+      bottomNavigationBar: const Customnavigationbar(), // Removed userID parameter
     );
   }
 }

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:smsecure/Pages/ForgotPassword/SetPasswordSuccess.dart';
 
 class SetNewPassword extends StatelessWidget {
-  const SetNewPassword({Key? key}) : super(key: key);
+  const SetNewPassword({super.key});
 
   @override
   Widget build(BuildContext context) {

@@ -1,29 +1,55 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smsecure/Pages/Home/HomePage.dart';
 import 'package:smsecure/firebase_options.dart';
 import 'package:telephony/telephony.dart';
 import 'package:smsecure/Pages/Login/CustLogin.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  final Telephony telephony = Telephony.instance;
-
-  // Request permissions before proceeding
-  bool? permissionsGranted = await telephony.requestPhoneAndSmsPermissions;
-
-  if (permissionsGranted ?? false) {
-    runApp(const MyApp());
-  } else {
-    print("Permissions not granted.");
-  }
+  // Run the app while checking permissions and login state
+  runApp(MyApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+// Initialize secure storage instance
+final FlutterSecureStorage secureStorage = FlutterSecureStorage();
+
+class MyApp extends StatefulWidget {
+  @override
+  _MyAppState createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final Telephony telephony = Telephony.instance;
+  String initialRoute = '/login';
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    // Request SMS permissions
+    bool? permissionsGranted = await telephony.requestPhoneAndSmsPermissions;
+    if (permissionsGranted ?? false) {
+      initialRoute = await _determineInitialRoute();
+    } else {
+      print("Permissions not granted.");
+      // Consider showing an in-app dialog here to prompt the user
+    }
+    if (mounted) {
+      setState(() {}); // Trigger rebuild after permissions and route determination
+    }
+  }
+
+  Future<String> _determineInitialRoute() async {
+    String? phone = await secureStorage.read(key: 'userPhone');
+    return phone != null ? '/home' : '/login';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,43 +62,26 @@ class MyApp extends StatelessWidget {
           foregroundColor: Color(0xFF113953),
         ),
       ),
-      home: _decideInitialScreen(),
-    );
-  }
-
-  Widget _decideInitialScreen() {
-    return FutureBuilder<bool>(
-      future: _isLoggedIn(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        } else if (snapshot.hasData && snapshot.data == true) {
-          return FutureBuilder<String?>(
-            future: _getUserID(),
-            builder: (context, userIdSnapshot) {
-              if (userIdSnapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              } else if (userIdSnapshot.hasData && userIdSnapshot.data != null) {
-                return HomePage(userID: userIdSnapshot.data!);
-              } else {
-                return const Custlogin();
-              }
-            },
-          );
-        } else {
-          return const Custlogin();
-        }
+      initialRoute: initialRoute,
+      routes: {
+        '/home': (context) => FutureBuilder<String?>(
+              future: _getUserPhone(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                } else if (snapshot.hasData && snapshot.data != null) {
+                  return const HomePage();
+                } else {
+                  return const Custlogin();
+                }
+              },
+            ),
+        '/login': (context) => const Custlogin(),
       },
     );
   }
 
-  Future<bool> _isLoggedIn() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('isLoggedIn') ?? false;
-  }
-
-  Future<String?> _getUserID() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    return prefs.getString('userID');
+  Future<String?> _getUserPhone() async {
+    return await secureStorage.read(key: 'userPhone');
   }
 }

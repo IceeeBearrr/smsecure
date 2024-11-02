@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:smsecure/Pages/Login/CustLogin.dart';
 
 class SetPasswordSuccess extends StatelessWidget {
-  const SetPasswordSuccess({Key? key}) : super(key: key);
+  const SetPasswordSuccess({super.key});
 
   @override
   Widget build(BuildContext context) {

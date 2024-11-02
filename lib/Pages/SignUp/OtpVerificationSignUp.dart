@@ -25,8 +25,8 @@ class OtpVerificationSignUp extends StatefulWidget {
 }
 
 class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
-  final List<TextEditingController> otpControllers =
-      List.generate(6, (index) => TextEditingController());
+  final List<TextEditingController> otpControllers = List.generate(6, (index) => TextEditingController());
+  final List<FocusNode> otpFocusNodes = List.generate(6, (index) => FocusNode());
   int _remainingTime = 60;
   late Timer _timer;
   bool _canResend = false;
@@ -47,8 +47,11 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
 
   @override
   void dispose() {
-    _timer.cancel();
+    if (_timer.isActive) {
+      _timer.cancel();
+    }
     otpControllers.forEach((controller) => controller.dispose());
+    otpFocusNodes.forEach((focusNode) => focusNode.dispose());
     super.dispose();
   }
 
@@ -72,16 +75,21 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
     setState(() {
       generatedOtp = _generateOtp();
     });
-    twilioFlutter.sendSMS(
-      toNumber: widget.phone,
-      messageBody: 'Your OTP code is: $generatedOtp',
-    ).then((_) {
-      print('OTP sent to ${widget.phone}: $generatedOtp');
-    }).catchError((error, stackTrace) {
-      print('Failed to send OTP. Error: $error');
-      print('StackTrace: $stackTrace');
-      _showErrorDialog('Failed to send OTP. Please try again.');
-    });
+    try {
+      twilioFlutter.sendSMS(
+        toNumber: widget.phone,
+        messageBody: 'Your OTP code is: $generatedOtp',
+      ).then((_) {
+        print('OTP sent to ${widget.phone}: $generatedOtp');
+      }).catchError((error, stackTrace) {
+        print('Failed to send OTP. Error: $error');
+        print('StackTrace: $stackTrace');
+        _showErrorDialog('Failed to send OTP. Please try again.');
+      });
+    } catch (e) {
+      print('Error occurred while sending OTP: $e');
+      _showErrorDialog('An unexpected error occurred while sending OTP. Please try again later.');
+    }
   }
 
   String _generateOtp() {
@@ -116,6 +124,7 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
         'phoneNo': widget.phone,
         'emailAddress': widget.email,
         'password': widget.password,
+        'participants': List<String>.from([widget.phone]),
       });
       print("User registered successfully.");
     } catch (e) {
@@ -207,6 +216,7 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
                       height: 55,
                       child: TextField(
                         controller: otpControllers[index],
+                        focusNode: otpFocusNodes[index],
                         keyboardType: TextInputType.number,
                         textAlign: TextAlign.center,
                         maxLength: 1,
@@ -221,9 +231,14 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
                           ),
                         ),
                         style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                        onTap: () {
+                          SystemChannels.textInput.invokeMethod('TextInput.show');
+                        },
                         onChanged: (value) {
                           if (value.length == 1 && index < 5) {
-                            FocusScope.of(context).nextFocus();
+                            FocusScope.of(context).requestFocus(otpFocusNodes[index + 1]);
+                          } else if (value.isEmpty && index > 0) {
+                            FocusScope.of(context).requestFocus(otpFocusNodes[index - 1]);
                           }
                         },
                       ),

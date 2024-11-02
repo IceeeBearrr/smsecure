@@ -3,7 +3,9 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:twilio_flutter/twilio_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+final FlutterSecureStorage secureStorage = FlutterSecureStorage();
 
 class OtpVerificationCustLogin extends StatefulWidget {
   final String phone;
@@ -19,11 +21,10 @@ class OtpVerificationCustLogin extends StatefulWidget {
   _OtpVerificationCustLoginState createState() => _OtpVerificationCustLoginState();
 }
 
-class _OtpVerificationCustLoginState extends State<OtpVerificationCustLogin> {
-  final List<TextEditingController> otpControllers =
-      List.generate(6, (index) => TextEditingController());
+class _OtpVerificationCustLoginState extends State<OtpVerificationCustLogin> with WidgetsBindingObserver {
+  final List<TextEditingController> otpControllers = List.generate(6, (index) => TextEditingController());
   int _remainingTime = 60;
-  late Timer _timer;
+  Timer? _timer;
   bool _canResend = false;
   String generatedOtp = '';
   late TwilioFlutter twilioFlutter;
@@ -31,34 +32,55 @@ class _OtpVerificationCustLoginState extends State<OtpVerificationCustLogin> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     twilioFlutter = TwilioFlutter(
       accountSid: 'ACbde03b214375773dc7bd448871cdbb50',
       authToken: '2fe2aca2c0c733457a6bcb1efbc1e273',
       twilioNumber: '+12053862557',
     );
+    _initializeOtpProcess();
+  }
+
+  void _initializeOtpProcess() {
     _startCountdown();
     _sendOtp();
   }
 
   @override
   void dispose() {
-    _timer.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
     otpControllers.forEach((controller) => controller.dispose());
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _timer?.cancel();
+    } else if (state == AppLifecycleState.resumed && _remainingTime > 0 && _timer == null) {
+      _startCountdown();
+    }
+  }
+
   void _startCountdown() {
     _canResend = false;
+    _timer?.cancel(); // Ensure the previous timer is cancelled before starting a new one
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_remainingTime > 0) {
-        setState(() {
-          _remainingTime--;
-        });
+        if (mounted) { // Check if mounted
+          setState(() {
+            _remainingTime--;
+          });
+        }
       } else {
-        setState(() {
-          _canResend = true;
-          _timer.cancel();
-        });
+        if (mounted) {
+          setState(() {
+            _canResend = true;
+          });
+        }
+        _timer?.cancel();
+        _timer = null;
       }
     });
   }
@@ -71,10 +93,14 @@ class _OtpVerificationCustLoginState extends State<OtpVerificationCustLogin> {
       toNumber: widget.phone,
       messageBody: 'Your OTP code is: $generatedOtp',
     ).then((_) {
-      print('OTP sent to ${widget.phone}: $generatedOtp');
-    }).catchError((error, stackTrace) {
-      print('Failed to send OTP. Error: $error');
-      _showErrorDialog('Failed to send OTP. Please try again.');
+      if (mounted) {
+        print('OTP sent to ${widget.phone}: $generatedOtp');
+      }
+    }).catchError((error) {
+      if (mounted) {
+        print('Failed to send OTP. Error: $error');
+        _showErrorDialog('Failed to send OTP. Please try again.');
+      }
     });
   }
 
@@ -84,64 +110,47 @@ class _OtpVerificationCustLoginState extends State<OtpVerificationCustLogin> {
   }
 
   void _resendCode() {
-    setState(() {
-      _remainingTime = 60;
-      _startCountdown();
-      _sendOtp();
-    });
+    if (mounted) {
+      setState(() {
+        _remainingTime = 60;
+        _startCountdown();
+        _sendOtp();
+      });
+    }
   }
 
   Future<void> _verifyOtpAndProceed() async {
     String enteredOtp = otpControllers.map((controller) => controller.text).join();
     if (enteredOtp == generatedOtp) {
-      // Update isLoggedIn to true and save the userID
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isLoggedIn', true);
-      await prefs.setString('userID', widget.phone);
-
-      _showSuccessDialog();
+      await secureStorage.write(key: 'userPhone', value: widget.phone);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+        }
+      });
     } else {
-      _showErrorDialog('Invalid OTP. Please try again.');
+      if (mounted) {
+        _showErrorDialog('Invalid OTP. Please try again.');
+      }
     }
   }
 
-  void _showSuccessDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: const Text('Success'),
-          content: const Text('OTP verified successfully!'),
+  void _showErrorDialog(String message) {
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Error'),
+          content: Text(message),
           actions: [
             TextButton(
-              onPressed: () {
-                // Close the dialog and navigate to the home page
-                Navigator.of(dialogContext).pop();
-                Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
-              },
+              onPressed: () => Navigator.of(context).pop(),
               child: const Text('OK'),
             ),
           ],
-        );
-      },
-    );
-  }
-
-  void _showErrorDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Error'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
+        ),
+      );
+    }
   }
 
   @override
@@ -245,9 +254,7 @@ class _OtpVerificationCustLoginState extends State<OtpVerificationCustLogin> {
                     child: Text(
                       "Resend Again",
                       style: TextStyle(
-                        color: _canResend
-                            ? const Color.fromARGB(255, 47, 77, 129)
-                            : Colors.grey,
+                        color: _canResend ? const Color.fromARGB(255, 47, 77, 129) : Colors.grey,
                         fontWeight: FontWeight.bold,
                       ),
                     ),

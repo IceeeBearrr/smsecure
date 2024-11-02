@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:telephony/telephony.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:smsecure/Pages/CustomNavigationBar.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:async';
+
+// Initialize Flutter Secure Storage instance
+final FlutterSecureStorage secureStorage = FlutterSecureStorage();
 
 class HomePage extends StatefulWidget {
-  final String userID;
-  const HomePage({Key? key, required this.userID}) : super(key: key);
+  const HomePage({Key? key}) : super(key: key);
 
   @override
   _HomePageState createState() => _HomePageState();
@@ -23,12 +26,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _shouldShowDialog = false;
 
   static const platform = MethodChannel("com.tarumt.smsecure/sms");
+  String? userPhone;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _loadUserPhone(); // Load user phone number from secure storage
     checkAndRequestPermissions(); // First check and request permissions
+    startPollingSentMessages(); // Start polling sent messages
+  }
+
+  Future<void> _loadUserPhone() async {
+    // Read the user phone number from secure storage
+    String? phone = await secureStorage.read(key: 'userPhone');
+    if (phone != userPhone) {
+      setState(() {
+        userPhone = phone;
+      });
+    }
   }
 
   @override
@@ -53,7 +69,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _shouldShowDialog = true; // Show dialog after setting default SMS app
       }
     } on PlatformException catch (e) {
-      print("Error: ${e.message}");
+      print("Error: \${e.message}");
     }
   }
 
@@ -61,7 +77,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     try {
       await platform.invokeMethod('openAppSettings');
     } on PlatformException catch (e) {
-      print("Error opening app settings: ${e.message}");
+      print("Error opening app settings: \${e.message}");
     }
   }
 
@@ -69,12 +85,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     bool? permissionsGranted = await telephony.requestPhoneAndSmsPermissions;
 
     if (permissionsGranted ?? false) {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      bool isImported = prefs.getBool('isMessagesImported') ?? false;
+      // Retrieve the `isMessagesImported` flag from secure storage
+      String? isImported = await secureStorage.read(key: 'isMessagesImported');
 
-      if (!isImported) {
+      if (isImported == null || isImported != 'true') {
         await importSmsMessages();
-        await prefs.setBool('isMessagesImported', true);
+        await secureStorage.write(key: 'isMessagesImported', value: 'true');
       }
       startMessageListeners();
 
@@ -147,8 +163,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         await storeSmsInFirestore(message, isIncoming: false);
       }
     } catch (e, stackTrace) {
-      print('Error importing SMS messages: $e');
-      print('Stack trace: $stackTrace');
+      print('Error importing SMS messages: \$e');
+      print('Stack trace: \$stackTrace');
     }
   }
 
@@ -159,58 +175,60 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       },
       onBackgroundMessage: backgroundMessageHandler,
     );
+  }
 
-    pollSentMessages();
+  void startPollingSentMessages() {
+    Timer.periodic(const Duration(minutes: 1), (timer) {
+      if (mounted) {
+        pollSentMessages();
+      } else {
+        timer.cancel();
+      }
+    });
   }
 
   static Future<void> backgroundMessageHandler(SmsMessage message) async {
     try {
-      print('Received SMS in background: ${message.body} from ${message.address}');
+      print('Received SMS in background: \${message.body} from \${message.address}');
       await Firebase.initializeApp();  // Initialize Firebase in background
       await storeSmsInFirestore(message, isIncoming: true);
     } catch (e, stackTrace) {
-      print('Error in backgroundMessageHandler: $e');
-      print('Stack trace: $stackTrace');
+      print('Error in backgroundMessageHandler: \$e');
+      print('Stack trace: \$stackTrace');
     }
   }
 
-
   Future<void> pollSentMessages() async {
-    while (true) {
-      try {
-        DateTime lastPollTime = lastOutgoingMessageTimestamp ?? filterDate;
+    try {
+      DateTime lastPollTime = lastOutgoingMessageTimestamp ?? filterDate;
 
-        List<SmsMessage> sentMessages = await telephony.getSentSms(
-          columns: [
-            SmsColumn.ADDRESS,
-            SmsColumn.BODY,
-            SmsColumn.DATE_SENT,
-            SmsColumn.DATE
-          ],
-          filter: SmsFilter.where(SmsColumn.DATE)
-              .greaterThan(lastPollTime.millisecondsSinceEpoch.toString()),
-        );
+      List<SmsMessage> sentMessages = await telephony.getSentSms(
+        columns: [
+          SmsColumn.ADDRESS,
+          SmsColumn.BODY,
+          SmsColumn.DATE_SENT,
+          SmsColumn.DATE
+        ],
+        filter: SmsFilter.where(SmsColumn.DATE)
+            .greaterThan(lastPollTime.millisecondsSinceEpoch.toString()),
+      );
 
-        for (var message in sentMessages) {
-          await storeSmsInFirestore(message, isIncoming: false);
+      for (var message in sentMessages) {
+        await storeSmsInFirestore(message, isIncoming: false);
 
-          int messageTimestamp = message.dateSent ??
-              message.date ??
-              DateTime.now().millisecondsSinceEpoch;
-          DateTime messageTime =
-              DateTime.fromMillisecondsSinceEpoch(messageTimestamp);
-          if (lastOutgoingMessageTimestamp == null ||
-              messageTime.isAfter(lastOutgoingMessageTimestamp!)) {
-            lastOutgoingMessageTimestamp = messageTime;
-          }
+        int messageTimestamp = message.dateSent ??
+            message.date ??
+            DateTime.now().millisecondsSinceEpoch;
+        DateTime messageTime =
+            DateTime.fromMillisecondsSinceEpoch(messageTimestamp);
+        if (lastOutgoingMessageTimestamp == null ||
+            messageTime.isAfter(lastOutgoingMessageTimestamp!)) {
+          lastOutgoingMessageTimestamp = messageTime;
         }
-
-        await Future.delayed(const Duration(minutes: 1));
-      } catch (e, stackTrace) {
-        print('Error polling sent messages: $e');
-        print('Stack trace: $stackTrace');
-        await Future.delayed(const Duration(minutes: 1));
       }
+    } catch (e, stackTrace) {
+      print('Error polling sent messages: \$e');
+      print('Stack trace: \$stackTrace');
     }
   }
 
@@ -233,7 +251,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       DateTime messageTime =
           DateTime.fromMillisecondsSinceEpoch(messageTimestamp);
 
-      print('Storing message with ID: $messageID for conversation: $conversationID');
+      print('Storing message with ID: \$messageID for conversation: \$conversationID');
 
       DocumentSnapshot messageSnapshot = await firestore
           .collection('conversations')
@@ -243,7 +261,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           .get();
 
       if (messageSnapshot.exists) {
-        print("Message already exists in Firestore: $messageID");
+        print("Message already exists in Firestore: \$messageID");
         return;
       }
 
@@ -261,7 +279,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         'isIncoming': isIncoming,
       });
 
-      print('Message stored successfully: $messageID');
+      print('Message stored successfully: \$messageID');
 
       DocumentReference conversationRef =
           firestore.collection('conversations').doc(conversationID);
@@ -293,14 +311,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         });
       }
 
-      print('Conversation updated successfully: $conversationID');
+      print('Conversation updated successfully: \$conversationID');
     } catch (e, stackTrace) {
-      print('Error storing SMS in Firestore: $e');
-      print('Stack trace: $stackTrace');
+      print('Error storing SMS in Firestore: \$e');
+      print('Stack trace: \$stackTrace');
     }
   }
 
-  
   static String generateConversationID(String? address) {
     if (address == null || address.isEmpty) return "unknown";
     String cleanAddress = address.replaceAll(RegExp(r'[^\w]+'), '');
@@ -308,16 +325,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   static String generateMessageID(SmsMessage message) {
-    int timestamp = message.dateSent ??
-        message.date ??
-        DateTime.now().millisecondsSinceEpoch;
+    int timestamp = message.date ?? DateTime.now().millisecondsSinceEpoch;
     String address = message.address ?? "unknown";
     String body = message.body ?? "";
 
     List<int> bytes = utf8.encode(body);
     String bodyHash = base64UrlEncode(bytes);
 
-    String messageID = '${timestamp}_${address}_$bodyHash';
+    String messageID = '\${timestamp}_\${address}_\$bodyHash';
     messageID = messageID.replaceAll('/', '_');
 
     return messageID;
@@ -326,12 +341,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Welcome ${widget.userID}")),
+      appBar: AppBar(title: const Text("Welcome")),
       body: const Center(
         child: Text("Welcome to Home Page"),
       ),
-      bottomNavigationBar: Customnavigationbar(userID: widget.userID), 
+      bottomNavigationBar: const Customnavigationbar(),
     );
   }
-
 }

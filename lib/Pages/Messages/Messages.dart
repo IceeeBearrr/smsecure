@@ -1,11 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:smsecure/Pages/Messages/Widget/RecentChats.dart';
 import 'package:smsecure/Pages/CustomNavigationBar.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-class Messages extends StatelessWidget {
-  final String userID; // Add userID parameter
+// Initialize Flutter Secure Storage instance
+final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
 
-  const Messages({Key? key, required this.userID}) : super(key: key);
+class Messages extends StatefulWidget {
+  const Messages({super.key});
+
+  @override
+  State<Messages> createState() => _MessagesState();
+}
+
+class _MessagesState extends State<Messages> {
+  String? userPhone;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserPhone();
+  }
+
+  Future<void> _loadUserPhone() async {
+    // Read the user phone number from secure storage
+    userPhone = await secureStorage.read(key: 'userPhone');
+    setState(() {}); // Trigger a rebuild to update the UI with the userPhone if needed
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,7 +95,7 @@ class Messages extends StatelessWidget {
           const Recentchats(),
         ],
       ),
-      bottomNavigationBar: Customnavigationbar(userID: userID), // Pass userID here
+      bottomNavigationBar: const Customnavigationbar(), // No userID parameter needed
     );
   }
 }

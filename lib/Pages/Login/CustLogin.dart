@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:smsecure/Pages/SignUp/SignUp.dart';
 import 'package:smsecure/Pages/ForgotPassword/ForgotPassword.dart';
-import 'package:smsecure/Pages/Login/OtpVerificationCustLogin.dart'; // Assuming this is the location of OTPVerificationCustLogin
+import 'package:smsecure/Pages/Login/OtpVerificationCustLogin.dart';
 
 class Custlogin extends StatefulWidget {
   const Custlogin({super.key});
@@ -18,31 +18,38 @@ class _CustloginState extends State<Custlogin> {
   bool _isPasswordVisible = false;
 
   Future<void> _loginUser() async {
-    if (_formKey.currentState!.validate()) {
+    // Ensure the form is valid and mounted
+    if (_formKey.currentState?.validate() ?? false) {
       final String phone = phoneController.text.trim();
       final String password = passwordController.text;
 
-      // Query Firestore to check for matching credentials
-      final QuerySnapshot result = await FirebaseFirestore.instance
-          .collection('smsUser')
-          .where('phoneNo', isEqualTo: phone)
-          .where('password', isEqualTo: password)
-          .get();
+      try {
+        // Query Firestore for matching credentials
+        final QuerySnapshot result = await FirebaseFirestore.instance
+            .collection('smsUser')
+            .where('phoneNo', isEqualTo: phone)
+            .where('password', isEqualTo: password)
+            .get();
 
-      if (result.docs.isEmpty) {
-        // Show error if no matching document is found
-        _showErrorDialog('Invalid phone number or password. Please try again.');
-      } else {
-        // Redirect to OTP verification screen if login is successful
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => OtpVerificationCustLogin(
-              phone: phone,
-              password: password,
+        // Check if any matching documents were found
+        if (result.docs.isEmpty) {
+          _showErrorDialog('Invalid phone number or password. Please try again.');
+        } else if (mounted) {
+          // Navigate to OTP verification screen if login is successful
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => OtpVerificationCustLogin(
+                phone: phone,
+                password: password,
+              ),
             ),
-          ),
-        );
+          );
+        }
+      } catch (e) {
+        // Handle any errors that occur during Firestore query
+        _showErrorDialog('An error occurred while logging in. Please try again later.');
+        print("Error: $e"); // For debugging purposes
       }
     }
   }
@@ -99,7 +106,6 @@ class _CustloginState extends State<Custlogin> {
                     ),
                   ),
                 ),
-
                 // Phone Number Input
                 Padding(
                   padding: const EdgeInsets.only(bottom: 20.0),
@@ -128,7 +134,6 @@ class _CustloginState extends State<Custlogin> {
                     },
                   ),
                 ),
-
                 // Password Input
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10.0),
@@ -167,7 +172,6 @@ class _CustloginState extends State<Custlogin> {
                     },
                   ),
                 ),
-
                 // Forgot Password
                 Align(
                   alignment: Alignment.centerRight,
@@ -192,7 +196,6 @@ class _CustloginState extends State<Custlogin> {
                     ),
                   ),
                 ),
-
                 // Next Button
                 Padding(
                   padding: const EdgeInsets.only(bottom: 20.0),
@@ -214,7 +217,6 @@ class _CustloginState extends State<Custlogin> {
                     ),
                   ),
                 ),
-
                 // Register Link
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
