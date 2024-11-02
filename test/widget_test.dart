@@ -12,8 +12,8 @@ import 'package:smsecure/main.dart';
 
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(MyApp());
+    // Build our app and trigger a frame with a default initial route.
+    await tester.pumpWidget(const MyApp(initialRoute: '/login'));
 
     // Verify that our counter starts at 0.
     expect(find.text('0'), findsOneWidget);

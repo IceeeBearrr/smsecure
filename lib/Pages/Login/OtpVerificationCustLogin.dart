@@ -5,17 +5,17 @@ import 'package:flutter/services.dart';
 import 'package:twilio_flutter/twilio_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-final FlutterSecureStorage secureStorage = FlutterSecureStorage();
+final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
 
 class OtpVerificationCustLogin extends StatefulWidget {
   final String phone;
   final String password;
 
   const OtpVerificationCustLogin({
-    Key? key,
+    super.key,
     required this.phone,
     required this.password,
-  }) : super(key: key);
+  });
 
   @override
   _OtpVerificationCustLoginState createState() => _OtpVerificationCustLoginState();
@@ -34,11 +34,14 @@ class _OtpVerificationCustLoginState extends State<OtpVerificationCustLogin> wit
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     twilioFlutter = TwilioFlutter(
-      accountSid: 'ACbde03b214375773dc7bd448871cdbb50',
-      authToken: '2fe2aca2c0c733457a6bcb1efbc1e273',
-      twilioNumber: '+12053862557',
+      accountSid: 'ACe0e0324d87ed0f8c44940a9696e24640',
+      authToken: '4ceca4aa65877e8ca20764ba285f46bb',
+      twilioNumber: '+15627408429',
     );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
     _initializeOtpProcess();
+    });
   }
 
   void _initializeOtpProcess() {
@@ -50,45 +53,48 @@ class _OtpVerificationCustLoginState extends State<OtpVerificationCustLogin> wit
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
-    otpControllers.forEach((controller) => controller.dispose());
+    for (var controller in otpControllers) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
-      _timer?.cancel();
-    } else if (state == AppLifecycleState.resumed && _remainingTime > 0 && _timer == null) {
+    if (state == AppLifecycleState.resumed && _remainingTime > 0 && _timer == null) {
       _startCountdown();
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _timer?.cancel();
     }
   }
+
 
   void _startCountdown() {
     _canResend = false;
     _timer?.cancel(); // Ensure the previous timer is cancelled before starting a new one
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_remainingTime > 0) {
-        if (mounted) { // Check if mounted
+      if (mounted) { // Check if mounted
+        if (_remainingTime > 0) {
           setState(() {
             _remainingTime--;
           });
-        }
-      } else {
-        if (mounted) {
+        } else {
           setState(() {
             _canResend = true;
           });
+          _timer?.cancel();
+          _timer = null;
         }
-        _timer?.cancel();
-        _timer = null;
+      } else {
+        timer.cancel(); // Cancel the timer if the widget is not mounted
       }
     });
   }
 
+
   void _sendOtp() {
-    setState(() {
-      generatedOtp = _generateOtp();
-    });
+    generatedOtp = _generateOtp();
     twilioFlutter.sendSMS(
       toNumber: widget.phone,
       messageBody: 'Your OTP code is: $generatedOtp',
@@ -123,11 +129,12 @@ class _OtpVerificationCustLoginState extends State<OtpVerificationCustLogin> wit
     String enteredOtp = otpControllers.map((controller) => controller.text).join();
     if (enteredOtp == generatedOtp) {
       await secureStorage.write(key: 'userPhone', value: widget.phone);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
+      if (mounted) {
+        // Delay navigation
+        WidgetsBinding.instance.addPostFrameCallback((_) {
           Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
-        }
-      });
+        });
+      }
     } else {
       if (mounted) {
         _showErrorDialog('Invalid OTP. Please try again.');

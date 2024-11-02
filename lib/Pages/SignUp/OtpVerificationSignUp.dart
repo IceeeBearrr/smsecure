@@ -13,12 +13,12 @@ class OtpVerificationSignUp extends StatefulWidget {
   final String password;
 
   const OtpVerificationSignUp({
-    Key? key,
+    super.key,
     required this.name,
     required this.email,
     required this.phone,
     required this.password,
-  }) : super(key: key);
+  });
 
   @override
   _OtpVerificationSignUpState createState() => _OtpVerificationSignUpState();
@@ -37,9 +37,9 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
   void initState() {
     super.initState();
     twilioFlutter = TwilioFlutter(
-      accountSid: 'ACbde03b214375773dc7bd448871cdbb50',
-      authToken: '2fe2aca2c0c733457a6bcb1efbc1e273',
-      twilioNumber: '+12053862557',
+      accountSid: 'ACe0e0324d87ed0f8c44940a9696e24640',
+      authToken: '4ceca4aa65877e8ca20764ba285f46bb',
+      twilioNumber: '+15627408429',
     );
     _startCountdown();
     _sendOtp();
@@ -50,8 +50,12 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
     if (_timer.isActive) {
       _timer.cancel();
     }
-    otpControllers.forEach((controller) => controller.dispose());
-    otpFocusNodes.forEach((focusNode) => focusNode.dispose());
+    for (var controller in otpControllers) {
+      controller.dispose();
+    }
+    for (var focusNode in otpFocusNodes) {
+      focusNode.dispose();
+    }
     super.dispose();
   }
 

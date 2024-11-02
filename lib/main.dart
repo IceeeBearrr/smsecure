@@ -1,55 +1,34 @@
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:smsecure/Pages/Home/HomePage.dart';
-import 'package:smsecure/firebase_options.dart';
-import 'package:telephony/telephony.dart';
 import 'package:smsecure/Pages/Login/CustLogin.dart';
+import 'package:smsecure/firebase_options.dart';
+import 'package:another_telephony/telephony.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
+
+// Initialize secure storage instance
+final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // Run the app while checking permissions and login state
-  runApp(MyApp());
-}
-
-// Initialize secure storage instance
-final FlutterSecureStorage secureStorage = FlutterSecureStorage();
-
-class MyApp extends StatefulWidget {
-  @override
-  _MyAppState createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  final Telephony telephony = Telephony.instance;
+  
   String initialRoute = '/login';
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeApp();
+  String? phone = await secureStorage.read(key: 'userPhone');
+  if (phone != null) {
+    initialRoute = '/home';
   }
 
-  Future<void> _initializeApp() async {
-    // Request SMS permissions
-    bool? permissionsGranted = await telephony.requestPhoneAndSmsPermissions;
-    if (permissionsGranted ?? false) {
-      initialRoute = await _determineInitialRoute();
-    } else {
-      print("Permissions not granted.");
-      // Consider showing an in-app dialog here to prompt the user
-    }
-    if (mounted) {
-      setState(() {}); // Trigger rebuild after permissions and route determination
-    }
-  }
+  runApp(MyApp(initialRoute: initialRoute));
+}
 
-  Future<String> _determineInitialRoute() async {
-    String? phone = await secureStorage.read(key: 'userPhone');
-    return phone != null ? '/home' : '/login';
-  }
+
+// Define the main app widget
+class MyApp extends StatelessWidget {
+  final String initialRoute;
+  const MyApp({super.key, required this.initialRoute});
 
   @override
   Widget build(BuildContext context) {
@@ -64,24 +43,9 @@ class _MyAppState extends State<MyApp> {
       ),
       initialRoute: initialRoute,
       routes: {
-        '/home': (context) => FutureBuilder<String?>(
-              future: _getUserPhone(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                } else if (snapshot.hasData && snapshot.data != null) {
-                  return const HomePage();
-                } else {
-                  return const Custlogin();
-                }
-              },
-            ),
+        '/home': (context) => const HomePage(),
         '/login': (context) => const Custlogin(),
       },
     );
-  }
-
-  Future<String?> _getUserPhone() async {
-    return await secureStorage.read(key: 'userPhone');
   }
 }

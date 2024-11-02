@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:telephony/telephony.dart';
+import 'package:another_telephony/telephony.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:smsecure/Pages/CustomNavigationBar.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:async';
-
-// Initialize Flutter Secure Storage instance
-final FlutterSecureStorage secureStorage = FlutterSecureStorage();
 
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
@@ -20,85 +17,103 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final Telephony telephony = Telephony.instance;
+  final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
+  final MethodChannel platform = const MethodChannel("com.tarumt.smsecure/sms");
+
   DateTime? lastIncomingMessageTimestamp;
   DateTime? lastOutgoingMessageTimestamp;
   final DateTime filterDate = DateTime(2024, 1, 1);
   bool _shouldShowDialog = false;
-
-  static const platform = MethodChannel("com.tarumt.smsecure/sms");
-  String? userPhone;
+  bool _permissionsGranted = false;
+  Timer? pollTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadUserPhone(); // Load user phone number from secure storage
-    checkAndRequestPermissions(); // First check and request permissions
-    startPollingSentMessages(); // Start polling sent messages
-  }
 
-  Future<void> _loadUserPhone() async {
-    // Read the user phone number from secure storage
-    String? phone = await secureStorage.read(key: 'userPhone');
-    if (phone != userPhone) {
-      setState(() {
-        userPhone = phone;
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initialize();
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    pollTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _initialize() async {
+    print("Initializing HomePage...");
+    await _initializeFirebase();
+    await _checkAndRequestPermissions();
+
+    if (_permissionsGranted && mounted) {
+      print("Permissions granted. Starting message listeners...");
+      _startMessageListeners();
+      await _checkAndSetDefaultSmsApp();
+    }
+  }
+
+  Future<void> _initializeFirebase() async {
+    try {
+      await Firebase.initializeApp();
+      print("Firebase initialized successfully.");
+    } catch (e) {
+      print("Error initializing Firebase: $e");
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _shouldShowDialog) {
-      _shouldShowDialog = false;
-      _showGoToSettingsDialog(); // Show dialog when the app resumes and condition is met
+      if (mounted) {
+        _showGoToSettingsDialog();
+        setState(() => _shouldShowDialog = false);
+      }
     }
   }
 
-  Future<void> checkAndSetDefaultSmsApp() async {
+  Future<void> _checkAndSetDefaultSmsApp() async {
     try {
-      final bool isDefault = await platform.invokeMethod('checkDefaultSms');
-      if (!isDefault) {
+      final bool? isDefault = await platform.invokeMethod<bool?>('checkDefaultSms');
+      print("Default SMS check: $isDefault");
+
+      if (isDefault != null && !isDefault) {
         await platform.invokeMethod('setDefaultSms');
-        _shouldShowDialog = true; // Show dialog after setting default SMS app
+        if (mounted) {
+          setState(() {
+            _shouldShowDialog = true;
+          });
+        }
       }
-    } on PlatformException catch (e) {
-      print("Error: \${e.message}");
+    } catch (e) {
+      print("Platform Exception during default SMS check: $e");
     }
   }
 
   Future<void> openAppSettings() async {
     try {
       await platform.invokeMethod('openAppSettings');
-    } on PlatformException catch (e) {
-      print("Error opening app settings: \${e.message}");
+      print("Opened app settings.");
+    } catch (e) {
+      print("Error opening app settings: $e");
     }
   }
 
-  Future<void> checkAndRequestPermissions() async {
-    bool? permissionsGranted = await telephony.requestPhoneAndSmsPermissions;
+  Future<void> _checkAndRequestPermissions() async {
+    _permissionsGranted = await telephony.requestPhoneAndSmsPermissions ?? false;
+    print("Permissions granted: $_permissionsGranted");
 
-    if (permissionsGranted ?? false) {
-      // Retrieve the `isMessagesImported` flag from secure storage
-      String? isImported = await secureStorage.read(key: 'isMessagesImported');
-
-      if (isImported == null || isImported != 'true') {
-        await importSmsMessages();
+    if (_permissionsGranted) {
+      final isImported = await secureStorage.read(key: 'isMessagesImported') ?? 'false';
+      if (isImported != 'true') {
+        await _importSmsMessages();
         await secureStorage.write(key: 'isMessagesImported', value: 'true');
       }
-      startMessageListeners();
-
-      // After importing messages, check if the app is the default SMS handler
-      checkAndSetDefaultSmsApp();
     } else {
-      _shouldShowDialog = true;
-      _showGoToSettingsDialog(); // Show permission dialog immediately if permissions are not granted
+      if (mounted) setState(() => _shouldShowDialog = true);
     }
   }
 
@@ -106,246 +121,156 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (mounted) {
       showDialog(
         context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            title: const Text('Additional Configuration Needed'),
-            content: const Text('Please configure additional settings for optimal app functionality.'),
-            actions: <Widget>[
-              TextButton(
-                child: const Text('Open Settings'),
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  openAppSettings();
-                },
-              ),
-              TextButton(
-                child: const Text('Later'),
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-              ),
-            ],
-          );
-        },
+        builder: (context) => AlertDialog(
+          title: const Text('Additional Configuration Needed'),
+          content: const Text('Please configure additional settings for optimal app functionality.'),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Open Settings'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                openAppSettings();
+              },
+            ),
+            TextButton(
+              child: const Text('Later'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        ),
       );
     }
   }
 
-  Future<void> importSmsMessages() async {
+  Future<void> _importSmsMessages() async {
+    print("Importing SMS messages...");
     try {
-      List<SmsMessage> incomingMessages = await telephony.getInboxSms(
-        columns: [
-          SmsColumn.ADDRESS,
-          SmsColumn.BODY,
-          SmsColumn.DATE_SENT,
-          SmsColumn.DATE
-        ],
-        filter: SmsFilter.where(SmsColumn.DATE)
-            .greaterThan(filterDate.millisecondsSinceEpoch.toString()),
+      final incomingMessages = await telephony.getInboxSms(
+        columns: [SmsColumn.ADDRESS, SmsColumn.BODY, SmsColumn.DATE_SENT, SmsColumn.DATE],
+        filter: SmsFilter.where(SmsColumn.DATE).greaterThan(filterDate.millisecondsSinceEpoch.toString()),
+      );
+      final outgoingMessages = await telephony.getSentSms(
+        columns: [SmsColumn.ADDRESS, SmsColumn.BODY, SmsColumn.DATE_SENT, SmsColumn.DATE],
+        filter: SmsFilter.where(SmsColumn.DATE).greaterThan(filterDate.millisecondsSinceEpoch.toString()),
       );
 
       for (var message in incomingMessages) {
-        await storeSmsInFirestore(message, isIncoming: true);
+        await _storeSmsInFirestore(message, isIncoming: true);
       }
-
-      List<SmsMessage> outgoingMessages = await telephony.getSentSms(
-        columns: [
-          SmsColumn.ADDRESS,
-          SmsColumn.BODY,
-          SmsColumn.DATE_SENT,
-          SmsColumn.DATE
-        ],
-        filter: SmsFilter.where(SmsColumn.DATE)
-            .greaterThan(filterDate.millisecondsSinceEpoch.toString()),
-      );
-
       for (var message in outgoingMessages) {
-        await storeSmsInFirestore(message, isIncoming: false);
+        await _storeSmsInFirestore(message, isIncoming: false);
       }
+      print("SMS messages imported successfully.");
     } catch (e, stackTrace) {
-      print('Error importing SMS messages: \$e');
-      print('Stack trace: \$stackTrace');
+      print('Error importing SMS messages: $e');
+      print('Stack trace: $stackTrace');
     }
   }
 
-  void startMessageListeners() {
+  void _startMessageListeners() {
+    print("Starting message listeners...");
     telephony.listenIncomingSms(
       onNewMessage: (SmsMessage message) async {
-        await storeSmsInFirestore(message, isIncoming: true);
+        await _storeSmsInFirestore(message, isIncoming: true);
       },
-      onBackgroundMessage: backgroundMessageHandler,
+      onBackgroundMessage: _backgroundMessageHandler,
     );
+    _startPollingSentMessages();
   }
 
-  void startPollingSentMessages() {
-    Timer.periodic(const Duration(minutes: 1), (timer) {
-      if (mounted) {
-        pollSentMessages();
-      } else {
-        timer.cancel();
-      }
+  static Future<void> _backgroundMessageHandler(SmsMessage message) async {
+    print("Handling background message...");
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp();
+    }
+    await _storeSmsInFirestore(message, isIncoming: true);
+  }
+
+  void _startPollingSentMessages() {
+    pollTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
+      print("Polling for sent messages...");
+      await _pollSentMessages();
     });
   }
 
-  static Future<void> backgroundMessageHandler(SmsMessage message) async {
+  Future<void> _pollSentMessages() async {
     try {
-      print('Received SMS in background: \${message.body} from \${message.address}');
-      await Firebase.initializeApp();  // Initialize Firebase in background
-      await storeSmsInFirestore(message, isIncoming: true);
-    } catch (e, stackTrace) {
-      print('Error in backgroundMessageHandler: \$e');
-      print('Stack trace: \$stackTrace');
-    }
-  }
-
-  Future<void> pollSentMessages() async {
-    try {
-      DateTime lastPollTime = lastOutgoingMessageTimestamp ?? filterDate;
-
-      List<SmsMessage> sentMessages = await telephony.getSentSms(
-        columns: [
-          SmsColumn.ADDRESS,
-          SmsColumn.BODY,
-          SmsColumn.DATE_SENT,
-          SmsColumn.DATE
-        ],
-        filter: SmsFilter.where(SmsColumn.DATE)
-            .greaterThan(lastPollTime.millisecondsSinceEpoch.toString()),
+      final lastPollTime = lastOutgoingMessageTimestamp ?? filterDate;
+      final sentMessages = await telephony.getSentSms(
+        columns: [SmsColumn.ADDRESS, SmsColumn.BODY, SmsColumn.DATE_SENT, SmsColumn.DATE],
+        filter: SmsFilter.where(SmsColumn.DATE).greaterThan(lastPollTime.millisecondsSinceEpoch.toString()),
       );
 
       for (var message in sentMessages) {
-        await storeSmsInFirestore(message, isIncoming: false);
-
-        int messageTimestamp = message.dateSent ??
-            message.date ??
-            DateTime.now().millisecondsSinceEpoch;
-        DateTime messageTime =
-            DateTime.fromMillisecondsSinceEpoch(messageTimestamp);
-        if (lastOutgoingMessageTimestamp == null ||
-            messageTime.isAfter(lastOutgoingMessageTimestamp!)) {
-          lastOutgoingMessageTimestamp = messageTime;
-        }
+        await _storeSmsInFirestore(message, isIncoming: false);
+        lastOutgoingMessageTimestamp = DateTime.fromMillisecondsSinceEpoch(
+            message.dateSent ?? message.date ?? DateTime.now().millisecondsSinceEpoch);
       }
+      print("Polling sent messages completed.");
     } catch (e, stackTrace) {
-      print('Error polling sent messages: \$e');
-      print('Stack trace: \$stackTrace');
+      print('Error polling sent messages: $e');
+      print('Stack trace: $stackTrace');
     }
   }
 
-  static Future<void> storeSmsInFirestore(SmsMessage message, {required bool isIncoming}) async {
-    print('Attempting to store SMS in Firestore');
+  static Future<void> _storeSmsInFirestore(SmsMessage message, {required bool isIncoming}) async {
     try {
-      FirebaseFirestore firestore = FirebaseFirestore.instance;
-      String? address = message.address;
-      if (address == null || address.isEmpty) {
-        print("Error: Message address is null or empty");
-        return;
-      }
+      final firestore = FirebaseFirestore.instance;
+      final address = message.address;
+      if (address == null || address.isEmpty) return;
 
-      String conversationID = generateConversationID(address);
-      String messageID = generateMessageID(message);
-      String yourPhoneNumber = "+6011-55050925";
-      int messageTimestamp = message.dateSent ??
-          message.date ??
-          DateTime.now().millisecondsSinceEpoch;
-      DateTime messageTime =
-          DateTime.fromMillisecondsSinceEpoch(messageTimestamp);
+      final conversationID = _generateConversationID(address);
+      final messageID = _generateMessageID(message);
+      final messageTimestamp = message.dateSent ?? message.date ?? DateTime.now().millisecondsSinceEpoch;
 
-      print('Storing message with ID: \$messageID for conversation: \$conversationID');
-
-      DocumentSnapshot messageSnapshot = await firestore
+      final messageSnapshot = await firestore
           .collection('conversations')
           .doc(conversationID)
           .collection('messages')
           .doc(messageID)
           .get();
 
-      if (messageSnapshot.exists) {
-        print("Message already exists in Firestore: \$messageID");
-        return;
-      }
-
-      await firestore
-          .collection('conversations')
-          .doc(conversationID)
-          .collection('messages')
-          .doc(messageID)
-          .set({
-        'messageID': messageID,
-        'senderID': isIncoming ? address : yourPhoneNumber,
-        'receiverID': isIncoming ? yourPhoneNumber : address,
-        'content': message.body ?? "",
-        'timestamp': messageTime,
-        'isIncoming': isIncoming,
-      });
-
-      print('Message stored successfully: \$messageID');
-
-      DocumentReference conversationRef =
-          firestore.collection('conversations').doc(conversationID);
-      DocumentSnapshot conversationSnapshot = await conversationRef.get();
-
-      if (conversationSnapshot.exists) {
-        Map<String, dynamic>? conversationData =
-            conversationSnapshot.data() as Map<String, dynamic>?;
-
-        if (conversationData != null) {
-          DateTime? lastMessageTimeStamp =
-              (conversationData['lastMessageTimeStamp'] as Timestamp?)?.toDate();
-
-          if (lastMessageTimeStamp == null ||
-              messageTime.isAfter(lastMessageTimeStamp)) {
-            await conversationRef.update({
-              'lastMessageTimeStamp': messageTime,
+      if (!messageSnapshot.exists) {
+        await firestore.collection('conversations')
+            .doc(conversationID)
+            .collection('messages')
+            .doc(messageID)
+            .set({
+              'messageID': messageID,
+              'senderID': isIncoming ? address : "+6011-55050925",
+              'receiverID': isIncoming ? "+6011-55050925" : address,
+              'content': message.body ?? "",
+              'timestamp': messageTimestamp,
+              'isIncoming': isIncoming,
             });
-          }
-        }
-      } else {
-        await conversationRef.set({
-          'conversationID': conversationID,
-          'participants': [address, yourPhoneNumber],
-          'createdAt': DateTime.now(),
-          'pin': null,
-          'lastMessageTimeStamp': messageTime,
-          'receiverID': isIncoming ? yourPhoneNumber : address,
-        });
+        print("Message stored in Firestore: $messageID");
       }
-
-      print('Conversation updated successfully: \$conversationID');
     } catch (e, stackTrace) {
-      print('Error storing SMS in Firestore: \$e');
-      print('Stack trace: \$stackTrace');
+      print('Firestore error: $e');
+      print('Stack trace: $stackTrace');
     }
   }
 
-  static String generateConversationID(String? address) {
-    if (address == null || address.isEmpty) return "unknown";
-    String cleanAddress = address.replaceAll(RegExp(r'[^\w]+'), '');
-    return cleanAddress;
+  static String _generateConversationID(String? address) {
+    return address?.replaceAll(RegExp(r'[^\w]+'), '') ?? "unknown";
   }
 
-  static String generateMessageID(SmsMessage message) {
-    int timestamp = message.date ?? DateTime.now().millisecondsSinceEpoch;
-    String address = message.address ?? "unknown";
-    String body = message.body ?? "";
-
-    List<int> bytes = utf8.encode(body);
-    String bodyHash = base64UrlEncode(bytes);
-
-    String messageID = '\${timestamp}_\${address}_\$bodyHash';
-    messageID = messageID.replaceAll('/', '_');
-
-    return messageID;
+  static String _generateMessageID(SmsMessage message) {
+    final timestamp = message.dateSent ?? message.date ?? DateTime.now().millisecondsSinceEpoch;
+    final address = message.address ?? "unknown";
+    final body = message.body ?? "";
+    final bodyHash = base64UrlEncode(utf8.encode(body));
+    return '${timestamp}_${address}_$bodyHash'.replaceAll('/', '_');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Welcome")),
-      body: const Center(
-        child: Text("Welcome to Home Page"),
-      ),
-      bottomNavigationBar: const Customnavigationbar(),
+      appBar: AppBar(title: const Text("Home")),
+      body: const Center(child: Text("Welcome to Home Page")),
+      bottomNavigationBar: Customnavigationbar(),
     );
   }
 }
