@@ -4,14 +4,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
 class Recentchats extends StatelessWidget {
-  const Recentchats({super.key});
-  
-  final String currentUserID = "+6011-55050925"; // Set this to the current user's phone number
+  final String currentUserID; // Set this to the current user's phone number
+
+  const Recentchats({super.key, required this.currentUserID});
 
   String formatDate(Timestamp timestamp) {
     DateTime date = timestamp.toDate();
     DateTime now = DateTime.now();
-    DateTime yesterday = now.subtract(Duration(days: 1));
+    DateTime yesterday = now.subtract(const Duration(days: 1));
 
     if (DateFormat('yyyy-MM-dd').format(date) == DateFormat('yyyy-MM-dd').format(now)) {
       return DateFormat('HH:mm').format(date); // Shows time if the conversation is from today

@@ -4,7 +4,7 @@ import 'package:smsecure/Pages/CustomNavigationBar.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // Initialize Flutter Secure Storage instance
-final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
+const FlutterSecureStorage secureStorage = FlutterSecureStorage();
 
 class Messages extends StatefulWidget {
   const Messages({super.key});
@@ -15,6 +15,7 @@ class Messages extends StatefulWidget {
 
 class _MessagesState extends State<Messages> {
   String? userPhone;
+  int _selectedIndex = 2; // Assuming Messages is the third tab
 
   @override
   void initState() {
@@ -26,6 +27,12 @@ class _MessagesState extends State<Messages> {
     // Read the user phone number from secure storage
     userPhone = await secureStorage.read(key: 'userPhone');
     setState(() {}); // Trigger a rebuild to update the UI with the userPhone if needed
+  }
+
+  void _onTabChange(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
   }
 
   @override
@@ -40,7 +47,7 @@ class _MessagesState extends State<Messages> {
           ),
         ],
       ),
-      body: ListView(
+      body: Column(
         children: [
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 25, horizontal: 20),
@@ -92,10 +99,15 @@ class _MessagesState extends State<Messages> {
               ),
             ),
           ),
-          const Recentchats(),
+          Expanded(
+            child: userPhone != null ? Recentchats(currentUserID: userPhone!) : const Center(child: CircularProgressIndicator()),
+          ),
         ],
       ),
-      bottomNavigationBar: const Customnavigationbar(), // No userID parameter needed
+      bottomNavigationBar: Customnavigationbar(
+        selectedIndex: _selectedIndex,
+        onTabChange: _onTabChange,
+      ),
     );
   }
 }

@@ -3,7 +3,6 @@ import 'package:smsecure/Pages/Chat/Widget/Chat.dart';
 import 'package:smsecure/Pages/Chat/Widget/ChatBottomSheet.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:another_telephony/telephony.dart';
-import 'package:smsecure/Pages/CustomNavigationBar.dart';
 
 class Chatpage extends StatelessWidget {
   final String conversationID;
@@ -81,7 +80,6 @@ class Chatpage extends StatelessWidget {
           ),
         ],
       ),
-      bottomNavigationBar: const Customnavigationbar(),
     );
   }
 

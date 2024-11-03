@@ -5,7 +5,7 @@ import 'package:smsecure/Pages/CustomNavigationBar.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // Initialize Flutter Secure Storage instance
-final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
+const FlutterSecureStorage secureStorage = FlutterSecureStorage();
 
 class Contactpage extends StatefulWidget {
   const Contactpage({super.key});
@@ -17,6 +17,7 @@ class Contactpage extends StatefulWidget {
 class _ContactpageState extends State<Contactpage> {
   List<Contact> contacts = [];
   String? userPhone;
+  int _selectedIndex = 1; // Assuming ContactPage is the second tab
 
   @override
   void initState() {
@@ -47,6 +48,12 @@ class _ContactpageState extends State<Contactpage> {
         );
       }
     }
+  }
+
+  void _onTabChange(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
   }
 
   @override
@@ -160,7 +167,10 @@ class _ContactpageState extends State<Contactpage> {
           ),
         ],
       ),
-      bottomNavigationBar: const Customnavigationbar(), // Removed userID parameter
+      bottomNavigationBar: Customnavigationbar(
+        selectedIndex: _selectedIndex,
+        onTabChange: _onTabChange,
+      ),
     );
   }
 }
