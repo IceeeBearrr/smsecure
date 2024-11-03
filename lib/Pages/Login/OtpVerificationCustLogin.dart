@@ -127,10 +127,7 @@ class _OtpVerificationCustLoginState extends State<OtpVerificationCustLogin> wit
     if (enteredOtp == generatedOtp) {
       await secureStorage.write(key: 'userPhone', value: widget.phone);
       if (mounted) {
-        // Delay navigation
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
-        });
+        _showSuccessDialog(); // Show success dialog and then redirect
       }
     } else {
       if (mounted) {
@@ -138,6 +135,27 @@ class _OtpVerificationCustLoginState extends State<OtpVerificationCustLogin> wit
       }
     }
   }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Prevents closing by tapping outside the dialog
+      builder: (context) => AlertDialog(
+        title: const Text('Success'),
+        content: const Text('OTP verified successfully!'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // Close the dialog
+              Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   void _showErrorDialog(String message) {
     if (mounted) {

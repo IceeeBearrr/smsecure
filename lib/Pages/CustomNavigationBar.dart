@@ -14,7 +14,6 @@ class Customnavigationbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print("Rendering Customnavigationbar"); // Debug print statement
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,

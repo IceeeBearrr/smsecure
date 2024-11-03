@@ -37,9 +37,9 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
   void initState() {
     super.initState();
     twilioFlutter = TwilioFlutter(
-      accountSid: 'ACe0e0324d87ed0f8c44940a9696e24640',
-      authToken: '4ceca4aa65877e8ca20764ba285f46bb',
-      twilioNumber: '+15627408429',
+      accountSid: 'ACeb000c82d06c291817006b2e6c2b7aa6',
+      authToken: 'fd828490e438dbc1113c99b1019668f7',
+      twilioNumber: '+18145805618',
     );
     _startCountdown();
     _sendOtp();
@@ -121,14 +121,16 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
 
   Future<void> _registerUserInFirestore() async {
     CollectionReference smsUsers = FirebaseFirestore.instance.collection('smsUser');
+    // Generate a unique smsUserID by combining the current timestamp and a random integer
+    String smsUserID = DateTime.now().millisecondsSinceEpoch.toString() + Random().nextInt(10000).toString();
+
     try {
-      await smsUsers.doc(widget.phone).set({
-        'smsUserID': widget.phone,
+      await smsUsers.doc(smsUserID).set({
+        'smsUserID': smsUserID,
         'name': widget.name,
         'phoneNo': widget.phone,
         'emailAddress': widget.email,
         'password': widget.password,
-        'participants': List<String>.from([widget.phone]),
       });
       print("User registered successfully.");
     } catch (e) {

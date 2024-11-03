@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:smsecure/Pages/Messages/Widget/RecentChats.dart';
-import 'package:smsecure/Pages/CustomNavigationBar.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // Initialize Flutter Secure Storage instance
@@ -15,7 +14,6 @@ class Messages extends StatefulWidget {
 
 class _MessagesState extends State<Messages> {
   String? userPhone;
-  int _selectedIndex = 2; // Assuming Messages is the third tab
 
   @override
   void initState() {
@@ -24,15 +22,8 @@ class _MessagesState extends State<Messages> {
   }
 
   Future<void> _loadUserPhone() async {
-    // Read the user phone number from secure storage
     userPhone = await secureStorage.read(key: 'userPhone');
     setState(() {}); // Trigger a rebuild to update the UI with the userPhone if needed
-  }
-
-  void _onTabChange(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
   }
 
   @override
@@ -50,7 +41,7 @@ class _MessagesState extends State<Messages> {
       body: Column(
         children: [
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 25, horizontal: 20),
+            padding: EdgeInsets.only(top: 25, right: 240, bottom: 25),
             child: Text(
               "Messages",
               style: TextStyle(
@@ -103,10 +94,6 @@ class _MessagesState extends State<Messages> {
             child: userPhone != null ? Recentchats(currentUserID: userPhone!) : const Center(child: CircularProgressIndicator()),
           ),
         ],
-      ),
-      bottomNavigationBar: Customnavigationbar(
-        selectedIndex: _selectedIndex,
-        onTabChange: _onTabChange,
       ),
     );
   }

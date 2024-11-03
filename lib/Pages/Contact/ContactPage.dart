@@ -1,87 +1,78 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_contacts/flutter_contacts.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:smsecure/Pages/CustomNavigationBar.dart';
+import 'ContactList.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Initialize Flutter Secure Storage instance
 const FlutterSecureStorage secureStorage = FlutterSecureStorage();
 
-class Contactpage extends StatefulWidget {
-  const Contactpage({super.key});
+class ContactPage extends StatefulWidget {
+  const ContactPage({super.key});
 
   @override
-  State<Contactpage> createState() => _ContactpageState();
+  State<ContactPage> createState() => _ContactPageState();
 }
 
-class _ContactpageState extends State<Contactpage> {
-  List<Contact> contacts = [];
+class _ContactPageState extends State<ContactPage> {
   String? userPhone;
-  int _selectedIndex = 1; // Assuming ContactPage is the second tab
+  String? currentSmsUserID;
 
   @override
   void initState() {
     super.initState();
-    _loadUserPhone(); // Load userPhone from secure storage
-    _getAllContacts();
+    _loadUserPhone();
   }
 
   Future<void> _loadUserPhone() async {
-    // Read the user phone number from secure storage
     userPhone = await secureStorage.read(key: 'userPhone');
     setState(() {}); // Trigger a rebuild to update the UI with the userPhone if needed
-  }
 
-  Future<void> _getAllContacts() async {
-    if (await Permission.contacts.request().isGranted) {
-      final Iterable<Contact> contactsIterable =
-          await FlutterContacts.getContacts(withProperties: true);
-      if (mounted) {
-        setState(() {
-          contacts = contactsIterable.toList();
-        });
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Contacts permission denied')),
-        );
-      }
+    if (userPhone != null) {
+      await _findSmsUserID();
     }
   }
 
-  void _onTabChange(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+  Future<void> _findSmsUserID() async {
+    final FirebaseFirestore firestore = FirebaseFirestore.instance;
+
+    final QuerySnapshot findSmsUserIDSnapshot = await firestore
+        .collection('smsUser')
+        .where('phoneNo', isEqualTo: userPhone)
+        .limit(1)
+        .get();
+
+    if (findSmsUserIDSnapshot.docs.isNotEmpty) {
+      currentSmsUserID = findSmsUserIDSnapshot.docs.first.id;
+      setState(() {}); // Trigger a rebuild to update the UI with the currentSmsUserID
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: const Drawer(), // Hamburger icon
+      drawer: const Drawer(),
       appBar: AppBar(
         actions: const [
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 15),
-            child: Icon(Icons.notifications), // Notification
+            child: Icon(Icons.notifications),
           ),
         ],
       ),
-      body: ListView(
+      body: Column(
         children: [
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 25, horizontal: 20),
+            padding: EdgeInsets.only(top: 25, right: 260, bottom: 25),
             child: Text(
               "Contacts",
               style: TextStyle(
                 color: Color(0xFF113953),
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
+                
               ),
             ),
           ),
-          // Search Bar
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 15),
             child: Container(
@@ -121,55 +112,12 @@ class _ContactpageState extends State<Contactpage> {
               ),
             ),
           ),
-          Container(
-            margin: const EdgeInsets.only(top: 20),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 25),
-            decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(35),
-                  topRight: Radius.circular(35),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.5),
-                    blurRadius: 10,
-                    spreadRadius: 2,
-                    offset: const Offset(0, 2),
-                  ),
-                ]),
-            child: ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: contacts.length,
-              itemBuilder: (context, index) {
-                final contact = contacts[index];
-                final phones = contact.phones;
-                return ListTile(
-                  title: Text(
-                    contact.displayName,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      color: Color(0xFF113953),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  subtitle: Text(
-                    phones.isNotEmpty ? phones.first.number : 'No Number',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Colors.black54,
-                    ),
-                  ),
-                );
-              },
-            ),
+          Expanded(
+            child: (userPhone != null && currentSmsUserID != null)
+                ? ContactList(currentUserID: currentSmsUserID!)
+                : const Center(child: CircularProgressIndicator()),
           ),
         ],
-      ),
-      bottomNavigationBar: Customnavigationbar(
-        selectedIndex: _selectedIndex,
-        onTabChange: _onTabChange,
       ),
     );
   }

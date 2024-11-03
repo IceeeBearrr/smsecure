@@ -5,10 +5,32 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'dart:async';
-import 'package:smsecure/Pages/CustomNavigationBar.dart';
-import 'package:smsecure/Pages/Contact/ContactPage.dart';
-import 'package:smsecure/Pages/Messages/Messages.dart';
-import 'package:smsecure/Pages/Profile/Profile.dart';
+import 'package:android_intent_plus/android_intent.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
+
+Future<void> backgroundMessageHandler(SmsMessage message) async {
+  final firestore = FirebaseFirestore.instance;
+  final address = message.address;
+  if (address == null || address.isEmpty) return;
+
+  final conversationID = address.replaceAll(RegExp(r'[^\w]+'), '');
+  final messageID = '${message.dateSent}_${address}';
+  final messageTimestamp = message.dateSent != null
+      ? Timestamp.fromMillisecondsSinceEpoch(message.dateSent!)
+      : Timestamp.now();
+
+  await firestore.collection('conversations')
+      .doc(conversationID)
+      .collection('messages')
+      .doc(messageID)
+      .set({
+        'messageID': messageID,
+        'senderID': address,
+        'content': message.body ?? "",
+        'timestamp': messageTimestamp,
+        'isIncoming': true,
+      }, SetOptions(merge: true));
+}
 
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
@@ -24,14 +46,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   bool _permissionsGranted = false;
   Timer? pollTimer;
-  int _selectedIndex = 0;
-
-  final List<Widget> _widgetOptions = <Widget>[
-    const HomePageContent(), // Replace with your actual home page content
-    const Contactpage(),
-    const Messages(),
-    const Profile(),
-  ];
+  String? userPhone;
 
   @override
   void initState() {
@@ -48,34 +63,195 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _initialize() async {
+    // Run the default SMS handler check first
+    await _checkAndSetDefaultSmsApp();
+
+    // Load userPhone from secure storage
+    await _loadUserPhone(); 
+
+    // Check permissions and start listening to messages if permissions are granted
     await _checkAndRequestPermissions();
     if (_permissionsGranted && mounted) {
       _startMessageListeners();
-      await _checkAndSetDefaultSmsApp();
+      _importContactsToFirestore(); // Run without await to prevent blocking
     }
+  }
+
+
+  Future<void> _loadUserPhone() async {
+    userPhone = await secureStorage.read(key: 'userPhone');
+    setState(() {}); // Trigger a rebuild to use the updated userPhone
   }
 
   Future<void> _checkAndSetDefaultSmsApp() async {
     try {
+      print("Checking if app is the default SMS handler"); // Debugging line
       final bool? isDefault = await platform.invokeMethod<bool?>('checkDefaultSms');
       if (isDefault != null && !isDefault) {
-        await platform.invokeMethod('setDefaultSms');
+        print("App is not the default SMS handler, showing dialog"); // Debugging line
+        _showDefaultSmsDialog();
+      } else {
+        print("App is already the default SMS handler"); // Debugging line
       }
     } catch (e) {
       print("Platform Exception during default SMS check: $e");
     }
   }
 
+
+  
+
+  void _showDefaultSmsDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Set as Default SMS App'),
+        content: const Text(
+          'To access and manage SMS messages, this app needs to be set as your default SMS application.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _redirectToDefaultSmsSettings();
+            },
+            child: const Text('Go to Settings'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _redirectToDefaultSmsSettings() {
+    const intent = AndroidIntent(
+      action: 'android.settings.MANAGE_DEFAULT_APPS_SETTINGS',
+    );
+    intent.launch();
+  }
+
   Future<void> _checkAndRequestPermissions() async {
-    _permissionsGranted = await telephony.requestPhoneAndSmsPermissions ?? false;
-    if (_permissionsGranted) {
-      final isImported = await secureStorage.read(key: 'isMessagesImported') ?? 'false';
-      if (isImported != 'true') {
-        await _importSmsMessages();
-        await secureStorage.write(key: 'isMessagesImported', value: 'true');
+    try {
+      bool smsPermissionGranted = await telephony.requestPhoneAndSmsPermissions ?? false;
+
+      if (smsPermissionGranted) {
+        _permissionsGranted = true;
+        final isImported = await secureStorage.read(key: 'isMessagesImported') ?? 'false';
+        if (isImported != 'true') {
+          await _importSmsMessages();
+          await secureStorage.write(key: 'isMessagesImported', value: 'true');
+        }
+      } else {
+        _permissionsGranted = false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('SMS, Phone, or Contacts permissions denied')),
+        );
       }
+    } catch (e) {
+      print('Error requesting permissions: $e');
     }
   }
+
+
+  Future<void> _importContactsToFirestore() async {
+    // Check if contacts have already been imported
+    final isContactsImported = await secureStorage.read(key: 'isContactsImported') ?? 'false';
+    if (isContactsImported == 'true') {
+      print("Contacts have already been imported to Firestore.");
+      return;
+    }
+
+    if (_permissionsGranted) {
+      print("Importing contacts to Firestore...");
+      final FirebaseFirestore firestore = FirebaseFirestore.instance;
+
+      // Fetch contacts and check for any issues in retrieval
+      Iterable<Contact> contacts = [];
+      try {
+        contacts = await FlutterContacts.getContacts(withProperties: true);
+      } catch (e) {
+        print("Error fetching contacts: $e");
+        return;
+      }
+
+      if (contacts.isEmpty) {
+        print("No contacts found.");
+        return;
+      }
+
+      // Retrieve userPhone from secure storage
+      String? userPhone = await secureStorage.read(key: 'userPhone');
+      if (userPhone == null) {
+        print("User phone number not found in secure storage.");
+        return;
+      }
+
+      String? userSmsUserID;
+      try {
+        final userSnapshot = await firestore
+            .collection('smsUser')
+            .where('phoneNo', isEqualTo: userPhone)
+            .limit(1)
+            .get();
+        if (userSnapshot.docs.isNotEmpty) {
+          userSmsUserID = userSnapshot.docs.first.id;
+        }
+      } catch (e) {
+        print("Error retrieving smsUserID: $e");
+        return;
+      }
+
+      for (var contact in contacts) {
+        final contactID = contact.id;
+        final name = contact.displayName;
+        final phoneNo = contact.phones.isNotEmpty ? contact.phones.first.number : 'No Number';
+
+        String? registeredSmsUserID;
+        try {
+          final contactSnapshot = await firestore
+              .collection('smsUser')
+              .where('phoneNo', isEqualTo: phoneNo)
+              .limit(1)
+              .get();
+          if (contactSnapshot.docs.isNotEmpty) {
+            registeredSmsUserID = contactSnapshot.docs.first.id;
+          }
+        } catch (e) {
+          print("Error retrieving registeredSmsUserID for $phoneNo: $e");
+          continue;
+        }
+
+        try {
+          await firestore.collection('contact').doc(contactID).set({
+            'contactID': contactID,
+            'smsUserID': userSmsUserID ?? '',
+            'registeredSMSUserID': registeredSmsUserID ?? '',
+            'name': name,
+            'phoneNo': phoneNo,
+            'isBlacklisted': false,
+            'isSpam': false,
+          }, SetOptions(merge: true));
+          print("Contact $name with phone number $phoneNo added to Firestore.");
+        } catch (e) {
+          print("Error adding contact $name to Firestore: $e");
+        }
+      }
+
+      // Mark contacts as imported in secure storage
+      await secureStorage.write(key: 'isContactsImported', value: 'true');
+      print("Contacts have been successfully imported and marked in secure storage.");
+    } else {
+      print("Permissions not granted for importing contacts.");
+    }
+  }
+
+
 
   Future<void> _importSmsMessages() async {
     try {
@@ -105,13 +281,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       onNewMessage: (SmsMessage message) async {
         await _storeSmsInFirestore(message, isIncoming: true);
       },
-      onBackgroundMessage: _backgroundMessageHandler,
+      onBackgroundMessage: backgroundMessageHandler, 
     );
     _startPollingSentMessages();
-  }
-
-  static Future<void> _backgroundMessageHandler(SmsMessage message) async {
-    await _storeSmsInFirestore(message, isIncoming: true);
   }
 
   void _startPollingSentMessages() {
@@ -137,15 +309,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  static Future<void> _storeSmsInFirestore(SmsMessage message, {required bool isIncoming}) async {
+  Future<void> _storeSmsInFirestore(SmsMessage message, {required bool isIncoming}) async {
     try {
       final firestore = FirebaseFirestore.instance;
       final address = message.address;
-      if (address == null || address.isEmpty) return;
+      if (address == null || address.isEmpty || userPhone == null) return;
 
       final conversationID = _generateConversationID(address);
       final messageID = _generateMessageID(message);
-      final messageTimestamp = message.dateSent ?? message.date ?? DateTime.now().millisecondsSinceEpoch;
+      final messageTimestamp = message.dateSent != null 
+          ? Timestamp.fromMillisecondsSinceEpoch(message.dateSent!)
+          : Timestamp.now();
 
       final messageSnapshot = await firestore
           .collection('conversations')
@@ -161,12 +335,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             .doc(messageID)
             .set({
               'messageID': messageID,
-              'senderID': isIncoming ? address : "+6011-55050925",
-              'receiverID': isIncoming ? "+6011-55050925" : address,
+              'senderID': isIncoming ? address : userPhone,
+              'receiverID': isIncoming ? userPhone : address,
               'content': message.body ?? "",
               'timestamp': messageTimestamp,
               'isIncoming': isIncoming,
             });
+        
+        await firestore.collection('conversations')
+            .doc(conversationID)
+            .set({
+              'lastMessageTimeStamp': messageTimestamp,
+              'participants': [address, userPhone]
+            }, SetOptions(merge: true));
       }
     } catch (e, stackTrace) {
       print('Firestore error: $e');
@@ -186,21 +367,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return '${timestamp}_${address}_$bodyHash'.replaceAll('/', '_');
   }
 
-  void _onTabChange(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Home")),
-      body: _widgetOptions.elementAt(_selectedIndex),
-      bottomNavigationBar: Customnavigationbar(
-        selectedIndex: _selectedIndex,
-        onTabChange: _onTabChange,
-      ),
+      body: const HomePageContent(),
     );
   }
 }
@@ -213,3 +384,4 @@ class HomePageContent extends StatelessWidget {
     return const Center(child: Text("Welcome to Home Page"));
   }
 }
+
