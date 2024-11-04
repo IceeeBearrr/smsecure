@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:smsecure/Pages/Messages/Widget/RecentChats.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:smsecure/Pages/SideNavigationBar.dart';
 
 // Initialize Flutter Secure Storage instance
 const FlutterSecureStorage secureStorage = FlutterSecureStorage();
@@ -29,15 +30,6 @@ class _MessagesState extends State<Messages> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: const Drawer(),
-      appBar: AppBar(
-        actions: const [
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 15),
-            child: Icon(Icons.notifications),
-          ),
-        ],
-      ),
       body: Column(
         children: [
           const Padding(

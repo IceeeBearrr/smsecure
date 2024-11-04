@@ -8,9 +8,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:smsecure/Pages/CustomNavigationBar.dart';
 import 'package:smsecure/Pages/Contact/ContactPage.dart';
 import 'package:smsecure/Pages/Profile/Profile.dart';
+import 'package:smsecure/Pages/SideNavigationBar.dart';
 
 // Initialize secure storage instance
-final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
+const FlutterSecureStorage secureStorage = FlutterSecureStorage();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -58,6 +59,8 @@ class MainApp extends StatefulWidget {
 
 class _MainAppState extends State<MainApp> {
   int _selectedIndex = 0;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _isDrawerOpen = false;
 
   void _onTabChange(int index) {
     setState(() {
@@ -67,21 +70,36 @@ class _MainAppState extends State<MainApp> {
 
   final List<Widget> _screens = [
     const HomePage(),
-    // Replace with the Contacts screen if available
     const ContactPage(),
     const Messages(),
-    // Replace with the Personal screen if available
-    const Profile(),
+    const ProfilePage(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_selectedIndex],
-      bottomNavigationBar: Customnavigationbar(
-        selectedIndex: _selectedIndex,
-        onTabChange: _onTabChange,
+      key: _scaffoldKey,
+      drawer: SideNavigationBar(), // Add the drawer here
+      onDrawerChanged: (isOpen) {
+        setState(() {
+          _isDrawerOpen = isOpen;
+        });
+      },
+      appBar: AppBar(        
+        actions: const [
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 15),
+            child: Icon(Icons.notifications),
+          ),
+        ],
       ),
+      body: _screens[_selectedIndex],
+      bottomNavigationBar: _isDrawerOpen
+          ? null // Hide BottomNavigationBar when the drawer is open
+          : Customnavigationbar(
+              selectedIndex: _selectedIndex,
+              onTabChange: _onTabChange,
+            ),
     );
   }
 }

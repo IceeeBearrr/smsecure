@@ -50,15 +50,6 @@ class _ContactPageState extends State<ContactPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: const Drawer(),
-      appBar: AppBar(
-        actions: const [
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 15),
-            child: Icon(Icons.notifications),
-          ),
-        ],
-      ),
       body: Column(
         children: [
           const Padding(

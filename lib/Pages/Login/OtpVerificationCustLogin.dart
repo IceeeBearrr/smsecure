@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:twilio_flutter/twilio_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
+const FlutterSecureStorage secureStorage = FlutterSecureStorage();
 
 class OtpVerificationCustLogin extends StatefulWidget {
   final String phone;

@@ -14,7 +14,7 @@ Future<void> backgroundMessageHandler(SmsMessage message) async {
   if (address == null || address.isEmpty) return;
 
   final conversationID = address.replaceAll(RegExp(r'[^\w]+'), '');
-  final messageID = '${message.dateSent}_${address}';
+  final messageID = '${message.dateSent}_$address';
   final messageTimestamp = message.dateSent != null
       ? Timestamp.fromMillisecondsSinceEpoch(message.dateSent!)
       : Timestamp.now();
@@ -33,7 +33,7 @@ Future<void> backgroundMessageHandler(SmsMessage message) async {
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({Key? key}) : super(key: key);
+  const HomePage({super.key});
 
   @override
   _HomePageState createState() => _HomePageState();
@@ -377,7 +377,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 }
 
 class HomePageContent extends StatelessWidget {
-  const HomePageContent({Key? key}) : super(key: key);
+  const HomePageContent({super.key});
 
   @override
   Widget build(BuildContext context) {

@@ -64,6 +64,11 @@
                 <data android:scheme="mmsto" />
             </intent-filter>
         </activity>
+        
+        <activity
+                android:name="com.yalantis.ucrop.UCropActivity"
+                android:screenOrientation="portrait"
+                android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
 
         <!-- Flutter embedding meta-data -->
         <meta-data
