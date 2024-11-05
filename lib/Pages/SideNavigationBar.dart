@@ -69,7 +69,7 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
                     child: const Icon(Icons.person, size: 60, color: Colors.white),
                   ),
             decoration: const BoxDecoration(
-              color: Color(0xFF3B5998), // Adjust this color as needed
+              color: Color(0xFF113953), // Adjust this color as needed
             ),
           ),
           _buildDrawerItem(Icons.home, "Home", context),
@@ -107,10 +107,10 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
 
   ListTile _buildDrawerItem(IconData icon, String title, BuildContext context) {
     return ListTile(
-      leading: Icon(icon, color: Colors.black),
+      leading: Icon(icon, color: const Color(0xFF113953)),
       title: Text(
         title,
-        style: const TextStyle(fontSize: 16),
+        style: const TextStyle(fontSize: 16, color: Color.fromARGB(200, 0, 0, 0)),
       ),
       onTap: () {
         Navigator.pop(context); // Close drawer on tap

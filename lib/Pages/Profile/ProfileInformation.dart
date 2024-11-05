@@ -86,9 +86,18 @@ class _ProfileInformationState extends State<ProfileInformation> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
+        title: const Text(
+          'Profile',
+          style: TextStyle(
+            fontSize: 22,              
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF113953),
+          ),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Color(0xFF113953)),
           onPressed: () async {

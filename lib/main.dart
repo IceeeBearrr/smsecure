@@ -45,6 +45,7 @@ class MyApp extends StatelessWidget {
       routes: {
         '/home': (context) => const MainApp(),
         '/login': (context) => const Custlogin(),
+        '/profile' : (context) => const ProfilePage(),
       },
     );
   }
@@ -54,15 +55,15 @@ class MainApp extends StatefulWidget {
   const MainApp({super.key});
 
   @override
-  _MainAppState createState() => _MainAppState();
+  MainAppState createState() => MainAppState();
 }
 
-class _MainAppState extends State<MainApp> {
+class MainAppState extends State<MainApp> {
   int _selectedIndex = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _isDrawerOpen = false;
 
-  void _onTabChange(int index) {
+  void onTabChange(int index) {
     setState(() {
       _selectedIndex = index;
     });
@@ -98,7 +99,7 @@ class _MainAppState extends State<MainApp> {
           ? null // Hide BottomNavigationBar when the drawer is open
           : Customnavigationbar(
               selectedIndex: _selectedIndex,
-              onTabChange: _onTabChange,
+              onTabChange: onTabChange,
             ),
     );
   }

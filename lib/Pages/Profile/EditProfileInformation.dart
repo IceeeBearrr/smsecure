@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:smsecure/Pages/Profile/Profile.dart';
+import 'package:smsecure/main.dart';
 
 const FlutterSecureStorage secureStorage = FlutterSecureStorage();
 
@@ -219,11 +221,32 @@ class _EditProfileInformationState extends State<EditProfileInformation> {
         if (profileImageUrl != null) 'profileImageUrl': profileImageUrl,
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated successfully')),
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Success'),
+            content: const Text('Profile updated successfully.'),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(); // Close the dialog
+                  Navigator.of(context).popUntil((route) => route.settings.name == '/home'); // Go back to MainApp
+
+                  // Find the ancestor MainApp state and set the selected index
+                  final mainAppState = context.findAncestorStateOfType<MainAppState>();
+                  mainAppState?.onTabChange(3); // Switch to the Profile tab
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
       );
+
     }
   }
+
 
   Future<bool> _onBackButtonPressed() async {
     setState(() {
@@ -243,6 +266,14 @@ class _EditProfileInformationState extends State<EditProfileInformation> {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
+        title: const Text(
+          'Edit Profile',
+          style: TextStyle(
+            fontSize: 22,              
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF113953),
+          ),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Color(0xFF113953)),
           onPressed: () async {
@@ -281,27 +312,45 @@ class _EditProfileInformationState extends State<EditProfileInformation> {
                     ),
                     const SizedBox(height: 20),
                     _buildTextField(
-                      _nameController, 
+                      _nameController,
                       'Name',
                       prefixIcon: const Icon(Icons.badge, color: Color(0xFF113953)),
                       textStyle: const TextStyle(color: Color.fromARGB(188, 0, 0, 0)),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter your name';
+                        }
+                        else if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(value)) {
+                          return 'Only letters and spaces are allowed';
+                        }
+                        return null;
+                      },
                     ),
                     const SizedBox(height: 10),
-
                     _buildTextField(
-                      _emailController, 
+                      _emailController,
                       'Email',
                       prefixIcon: const Icon(Icons.email, color: Color(0xFF113953)),
                       textStyle: const TextStyle(color: Color.fromARGB(188, 0, 0, 0)),
-                    ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter your email';
+                        }
+                        else if (!RegExp(r'^[\w-]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                          return 'Please enter a valid email address';
+                        }
+                         return null;
+                      },
+                     ),
                     const SizedBox(height: 10),
 
                     _buildTextField(
                       _phoneController,
                       'Phone Number',
-                      keyboardType: TextInputType.phone,
                       prefixIcon: const Icon(Icons.call, color: Color(0xFF113953)),
                       textStyle: const TextStyle(color: Color.fromARGB(188, 0, 0, 0)),
+                      keyboardType: TextInputType.phone,
+                      enabled: false, 
                     ),
                     const SizedBox(height: 10),
                     
@@ -341,10 +390,13 @@ class _EditProfileInformationState extends State<EditProfileInformation> {
       Widget? prefixIcon,
       TextInputType? keyboardType,
       TextStyle? textStyle,
+      String? Function(String?)? validator,
+      bool enabled = true,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
+      enabled: enabled,
       style: textStyle,
       decoration: InputDecoration(
         labelText: label,
@@ -353,6 +405,7 @@ class _EditProfileInformationState extends State<EditProfileInformation> {
           borderRadius: BorderRadius.circular(8),
         ),
       ),
+      validator: validator,
     );
   }
 

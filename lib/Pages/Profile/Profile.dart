@@ -23,14 +23,32 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _loadUserData(); // Load data initially
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadUserData(); // Reload data when dependencies change
+  }
+
+  // This ensures that the data is refreshed when the widget is rebuilt, for instance, when navigating back
+  @override
+  void didUpdateWidget(covariant ProfilePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _loadUserData(); // Reload profile data when returning to this page
   }
 
   Future<void> _loadUserData() async {
+    setState(() {
+      isLoading = true; // Start loading
+    });
+
     userPhone = await secureStorage.read(key: 'userPhone');
     if (userPhone != null) {
       await _fetchUserProfile();
     }
+
     setState(() {
       isLoading = false; // Set loading to false after data is loaded
     });
@@ -118,19 +136,54 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: Column(
                       children: [
                         _buildProfileOption(Icons.person, 'Profile', onTap: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileInformation()));
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ProfileInformation(),
+                            ),
+                          ).then((_) {
+                            _loadUserData(); // Reload data when returning from ProfileInformation
+                          });
                         }),
                         _buildProfileOption(Icons.contacts, 'Whitelisted contacts', onTap: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileInformation()));
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ProfileInformation(),
+                            ),
+                          ).then((_) {
+                            _loadUserData(); // Reload data when returning
+                          });
                         }),
                         _buildProfileOption(Icons.block, 'Blacklisted contacts', onTap: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileInformation()));
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ProfileInformation(),
+                            ),
+                          ).then((_) {
+                            _loadUserData(); // Reload data when returning
+                          });
                         }),
                         _buildProfileOption(Icons.folder, 'Quarantine Folder', onTap: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileInformation()));
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ProfileInformation(),
+                            ),
+                          ).then((_) {
+                            _loadUserData(); // Reload data when returning
+                          });
                         }),
                         _buildProfileOption(Icons.settings, 'Customisable Filtering Settings', onTap: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileInformation()));
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ProfileInformation(),
+                            ),
+                          ).then((_) {
+                            _loadUserData(); // Reload data when returning
+                          });
                         }),
                         _buildProfileOption(Icons.logout, 'Logout', color: Colors.red, onTap: () {
                           // Handle logout action
