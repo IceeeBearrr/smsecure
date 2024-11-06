@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'ContactList.dart';
+import 'package:smsecure/Pages/WhitelistContact/WhitelistContactList.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:smsecure/Pages/Contact/AddContact.dart';
@@ -7,14 +7,14 @@ import 'package:smsecure/Pages/Contact/AddContact.dart';
 // Initialize Flutter Secure Storage instance
 const FlutterSecureStorage secureStorage = FlutterSecureStorage();
 
-class ContactPage extends StatefulWidget {
-  const ContactPage({super.key});
+class WhitelistContactPage extends StatefulWidget {
+  const WhitelistContactPage({super.key});
 
   @override
-  State<ContactPage> createState() => _ContactPageState();
+  State<WhitelistContactPage> createState() => _WhitelistContactPageState();
 }
 
-class _ContactPageState extends State<ContactPage> {
+class _WhitelistContactPageState extends State<WhitelistContactPage> {
   String? userPhone;
   String? currentSmsUserID;
 
@@ -133,7 +133,7 @@ class _ContactPageState extends State<ContactPage> {
           const SizedBox(height: 10),
           Expanded(
             child: (userPhone != null && currentSmsUserID != null)
-                ? ContactList(currentUserID: currentSmsUserID!)
+                ? WhitelistContactList(currentUserID: currentSmsUserID!)
                 : const Center(child: CircularProgressIndicator()),
           ),
         ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:custom_clippers/custom_clippers.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class Chat extends StatefulWidget {
   final String conversationID;
@@ -11,12 +12,36 @@ class Chat extends StatefulWidget {
   _ChatState createState() => _ChatState();
 }
 
-class _ChatState extends State<Chat> {
+class _ChatState extends State<Chat> with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
+  final storage = FlutterSecureStorage();
+  String? userPhone;
 
   @override
   void initState() {
     super.initState();
+    loadUserPhone();
+    WidgetsBinding.instance.addObserver(this); // Add observer for keyboard changes
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // Remove observer
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    // This is called when the view insets change (keyboard shows/hides)
+    _scrollToBottom();
+  }
+
+  Future<void> loadUserPhone() async {
+    // Retrieve the current user's phone number from secure storage
+    userPhone = await storage.read(key: "userPhone");
+    setState(() {}); // Update the UI after retrieving the phone number
   }
 
   // Scroll to bottom function
@@ -47,7 +72,7 @@ class _ChatState extends State<Chat> {
         var messages = snapshot.data!.docs;
 
         // Scroll to bottom whenever new data is loaded
-        Future.delayed(Duration.zero, () => _scrollToBottom());
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
         return ListView.builder(
           controller: _scrollController,
@@ -57,7 +82,8 @@ class _ChatState extends State<Chat> {
             var messageContent = message['content'];
             var senderID = message['senderID'];
 
-            bool isSentByUser = senderID == "Janice"; // Replace with actual user ID check
+            // Check if the message was sent by the current user
+            bool isSentByUser = senderID == userPhone;
 
             return Padding(
               padding: isSentByUser
@@ -92,11 +118,5 @@ class _ChatState extends State<Chat> {
         );
       },
     );
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
   }
 }

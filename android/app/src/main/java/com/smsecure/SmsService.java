@@ -41,52 +41,65 @@ public class SmsService extends Service {
 
     private void storeSmsInFirestore(String senderNumber, String messageBody) {
         FirebaseFirestore firestore = FirebaseFirestore.getInstance();
-
-        // Generate a unique conversation ID based on the sender's number
-        String conversationID = generateConversationID(senderNumber);
-
+    
+        // Assuming you retrieve the userPhone from secure storage or some reliable source
+        String userPhone = retrieveUserPhoneFromStorage(); // Replace this with the actual method to get user's phone number
+    
+        // Generate a unique conversation ID based on both sender and user numbers
+        String conversationID = generateConversationID(userPhone, senderNumber);
+    
         // Create a reference to the conversation document
         DocumentReference conversationRef = firestore.collection("conversations").document(conversationID);
-
+    
         // Prepare message data
         Map<String, Object> messageData = new HashMap<>();
         messageData.put("senderID", senderNumber);
-        messageData.put("receiverID", "YourAppUserID"); // Set your app user ID or phone number here
+        messageData.put("receiverID", userPhone); // Use actual user phone number instead of "YourAppUserID"
         messageData.put("content", messageBody);
         messageData.put("timestamp", new Date());
         messageData.put("isIncoming", true);
-
+    
         // Update or create conversation and add message
         conversationRef.get().addOnCompleteListener(task -> {
             if (task.isSuccessful() && !task.getResult().exists()) {
                 // Create a new conversation if it doesn't exist
                 Map<String, Object> conversationData = new HashMap<>();
                 conversationData.put("conversationID", conversationID);
-
-                // Convert participants array to List
-                conversationData.put("participants", Arrays.asList(senderNumber, "YourAppUserID"));
+    
+                // Use the actual user phone number and sender's number in participants
+                conversationData.put("participants", Arrays.asList(userPhone, senderNumber));
                 conversationData.put("createdAt", new Date());
                 conversationData.put("lastMessageTimeStamp", new Date());
-
+    
                 conversationRef.set(conversationData)
                     .addOnSuccessListener(aVoid -> Log.d("SmsService", "Conversation created with ID: " + conversationID))
                     .addOnFailureListener(e -> Log.w("SmsService", "Error creating conversation", e));
             }
-
+    
             // Add the message to the sub-collection
             conversationRef.collection("messages").add(messageData)
                 .addOnSuccessListener(documentReference -> Log.d("SmsService", "Message stored with ID: " + documentReference.getId()))
                 .addOnFailureListener(e -> Log.w("SmsService", "Error storing message", e));
-
+    
             // Update lastMessageTimeStamp in the conversation document
             conversationRef.update("lastMessageTimeStamp", new Date())
                 .addOnSuccessListener(aVoid -> Log.d("SmsService", "Conversation timestamp updated"))
                 .addOnFailureListener(e -> Log.w("SmsService", "Error updating conversation timestamp", e));
         });
     }
-
-    private String generateConversationID(String senderNumber) {
-        return senderNumber.replaceAll("[^\\w]", "");
+    
+    // Method to generate conversationID using both sender and user phone numbers
+    private String generateConversationID(String userPhone, String senderPhone) {
+        String[] participants = {userPhone, senderPhone};
+        Arrays.sort(participants); // Sort for consistency
+        return participants[0] + "_" + participants[1];
+    }
+    
+    // Placeholder method to retrieve user's phone number - implement as needed
+    private String retrieveUserPhoneFromStorage() {
+        // Retrieve user phone number from secure storage or other sources
+        // This is just a placeholder - implement actual retrieval logic
+        return "+601155050925"; // Replace with actual method to get the user phone number
     }
 
     @Override

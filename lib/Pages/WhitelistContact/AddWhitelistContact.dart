@@ -5,24 +5,23 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:smsecure/Pages/Contact/ContactDetail.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-class EditContactPage extends StatefulWidget {
-  final String contactId;
-
-  const EditContactPage({Key? key, required this.contactId}) : super(key: key);
+class AddWhitelistContactPage extends StatefulWidget {
+  const AddWhitelistContactPage({Key? key}) : super(key: key);
 
   @override
-  _EditContactPageState createState() => _EditContactPageState();
+  _AddWhitelistContactPageState createState() => _AddWhitelistContactPageState();
 }
 
-class _EditContactPageState extends State<EditContactPage> {
+class _AddWhitelistContactPageState extends State<AddWhitelistContactPage> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
   late TextEditingController _noteController;
   String? _profileImageBase64;
   File? _selectedImage;
+  String? _whitelistChoice = "No"; // Default to "No"
 
   final ImagePicker _picker = ImagePicker();
 
@@ -32,36 +31,6 @@ class _EditContactPageState extends State<EditContactPage> {
     _nameController = TextEditingController();
     _phoneController = TextEditingController();
     _noteController = TextEditingController();
-    _fetchContactDetails();
-  }
-
-  Future<void> _fetchContactDetails() async {
-    final firestore = FirebaseFirestore.instance;
-    final contactSnapshot = await firestore.collection('contact').doc(widget.contactId).get();
-
-    if (contactSnapshot.exists) {
-      final contactData = contactSnapshot.data()!;
-      _nameController.text = contactData['name'] ?? '';
-      _phoneController.text = contactData['phoneNo'] ?? '';
-      _noteController.text = contactData['note'] == 'No note' ? '' : contactData['note'];
-
-      if (contactData.containsKey('profileImageUrl') && contactData['profileImageUrl'].isNotEmpty) {
-        setState(() {
-          _profileImageBase64 = contactData['profileImageUrl'];
-        });
-      } else if (contactData.containsKey('registeredSMSUserID') && contactData['registeredSMSUserID'].isNotEmpty) {
-        final smsUserId = contactData['registeredSMSUserID'];
-        final smsUserSnapshot = await firestore.collection('smsUser').doc(smsUserId).get();
-        if (smsUserSnapshot.exists) {
-          final smsUserData = smsUserSnapshot.data();
-          if (smsUserData != null && smsUserData['profileImageUrl'] != null) {
-            setState(() {
-              _profileImageBase64 = smsUserData['profileImageUrl'];
-            });
-          }
-        }
-      }
-    }
   }
 
   Future<void> _showImageSourceModal(BuildContext context) {
@@ -124,7 +93,8 @@ class _EditContactPageState extends State<EditContactPage> {
     // Crop the image if it meets the size limit
     await _cropImage(imageFile);
   }
-  
+
+
   Future<void> _cropImage(File imageFile) async {
     final croppedFile = await ImageCropper().cropImage(
       sourcePath: imageFile.path,
@@ -144,9 +114,13 @@ class _EditContactPageState extends State<EditContactPage> {
 
     if (croppedFile != null) {
       final int fileSize = await File(croppedFile.path).length();
-      if (fileSize > 1048576) { // Check if file size is greater than 1 MB (1 MB = 1048576 bytes)
-        _showFileSizeError();
-        return; // Exit the function if file size is too large
+      if (fileSize > 1048576) { // 1 MB limit check
+        _showFileSizeError(); // Show error message
+        setState(() {
+          _selectedImage = null; // Reset selected image
+          _profileImageBase64 = null; // Clear the base64 image string
+        });
+        return; // Exit the function without saving the large image
       }
 
       setState(() {
@@ -155,6 +129,7 @@ class _EditContactPageState extends State<EditContactPage> {
       _profileImageBase64 = await _convertImageToBase64(File(croppedFile.path));
     }
   }
+
 
   void _showFileSizeError() {
     showDialog(
@@ -194,33 +169,97 @@ class _EditContactPageState extends State<EditContactPage> {
   }
 
 
+  Future<String?> getSmsUserID() async {
+    try {
+      const FlutterSecureStorage secureStorage = FlutterSecureStorage();
+      String? userPhone = await secureStorage.read(key: 'userPhone');
+      
+      if (userPhone == null) {
+        print("Error: userPhone is not set in secure storage.");
+        return null;
+      }
+
+      final FirebaseFirestore firestore = FirebaseFirestore.instance;
+      final QuerySnapshot querySnapshot = await firestore
+          .collection('smsUser')
+          .where('phoneNo', isEqualTo: userPhone)
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        return querySnapshot.docs.first.id;
+      } else {
+        print("Error: No smsUserID found for the given phone number.");
+        return null;
+      }
+    } catch (e) {
+      print("Error retrieving smsUserID: $e");
+      return null;
+    }
+  }
+
   Future<void> _saveContactDetails() async {
     if (_formKey.currentState!.validate()) {
+      final String? smsUserID = await getSmsUserID();
+
+      if (smsUserID == null) {
+        print("Error: Could not retrieve smsUserID.");
+        return;
+      }
+      
+      if (_profileImageBase64 != null && _profileImageBase64!.length > 1048487) {
+        _showFileSizeError();
+        return; // Exit if profile image is too large
+      }
+
       final firestore = FirebaseFirestore.instance;
-      await firestore.collection('contact').doc(widget.contactId).update({
+      String? registeredSMSUserID;
+
+      final String contactPhoneNumber = _phoneController.text;
+      final QuerySnapshot querySnapshot = await firestore
+          .collection('smsUser')
+          .where('phoneNo', isEqualTo: contactPhoneNumber)
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        registeredSMSUserID = querySnapshot.docs.first.id;
+      } else {
+        registeredSMSUserID = "";
+      }
+
+      await firestore.collection('contact').add({
+        'isBlacklisted': false,
+        'isSpam': false,
         'name': _nameController.text,
-        'phoneNo': _phoneController.text,
+        'phoneNo': contactPhoneNumber,
         'note': _noteController.text.isEmpty ? 'No note' : _noteController.text,
+        'smsUserID': smsUserID,
+        'registeredSMSUserID': registeredSMSUserID,
         if (_profileImageBase64 != null) 'profileImageUrl': _profileImageBase64,
       });
+
+      // Add to whitelist if selected
+      if (_whitelistChoice == "Yes") {
+        String documentID = firestore.collection('whitelist').doc().id;
+        await firestore.collection('whitelist').doc(documentID).set({
+          'smsUserID': smsUserID,
+          'phoneNo': contactPhoneNumber,
+        });
+      }
 
       showDialog(
         context: context,
         builder: (BuildContext context) {
           return AlertDialog(
             title: const Text('Success'),
-            content: const Text('Contact updated successfully.'),
+            content: const Text('Contact added successfully.'),
             actions: [
               TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(
-                    builder: (context) => ContactDetailsPage(contactId: widget.contactId),
-                  ),
-                  (Route<dynamic> route) => route.isFirst,
-                );
-              },
+                onPressed: () {
+                  Navigator.of(context).pop(); // Close the dialog
+                  Navigator.of(context).pop(true); // Close AddContactPage and return true
+                },
                 child: const Text('OK'),
               ),
             ],
@@ -228,6 +267,59 @@ class _EditContactPageState extends State<EditContactPage> {
         },
       );
     }
+  }
+
+  // Function to build the whitelist field with Yes/No options
+  Widget _buildWhitelistField(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _showWhitelistModal(context),
+      child: AbsorbPointer(
+        child: TextFormField(
+          controller: TextEditingController(text: _whitelistChoice),
+          decoration: InputDecoration(
+            labelText: 'Add to Whitelist',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            suffixIcon: const Icon(Icons.arrow_drop_down, color: Color(0xFF113953)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showWhitelistModal(BuildContext context) async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
+      ),
+      builder: (BuildContext context) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text('Yes'),
+              onTap: () {
+                setState(() {
+                  _whitelistChoice = "Yes";
+                });
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              title: const Text('No'),
+              onTap: () {
+                setState(() {
+                  _whitelistChoice = "No";
+                });
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -241,7 +333,7 @@ class _EditContactPageState extends State<EditContactPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Edit Contact',
+          'Add Contact',
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.bold,
@@ -313,6 +405,8 @@ class _EditContactPageState extends State<EditContactPage> {
                     border: OutlineInputBorder(),
                   ),
                 ),
+                const SizedBox(height: 20),
+                _buildWhitelistField(context), // Add whitelist field
                 const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,

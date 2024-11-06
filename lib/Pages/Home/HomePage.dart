@@ -9,28 +9,89 @@ import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 
 Future<void> backgroundMessageHandler(SmsMessage message) async {
-  final firestore = FirebaseFirestore.instance;
-  final address = message.address;
-  if (address == null || address.isEmpty) return;
+    const FlutterSecureStorage secureStorage = const FlutterSecureStorage();
+    final firestore = FirebaseFirestore.instance;
 
-  final conversationID = address.replaceAll(RegExp(r'[^\w]+'), '');
-  final messageID = '${message.dateSent}_$address';
-  final messageTimestamp = message.dateSent != null
-      ? Timestamp.fromMillisecondsSinceEpoch(message.dateSent!)
-      : Timestamp.now();
+    // Retrieve sender and user phone numbers
+    String senderPhoneNumber = message.address ?? "";
+    String userPhone = await secureStorage.read(key: "userPhone") ?? "";
 
-  await firestore.collection('conversations')
-      .doc(conversationID)
-      .collection('messages')
-      .doc(messageID)
-      .set({
+    if (userPhone.isEmpty) {
+        print("Error: userPhone is not set in secure storage.");
+        return; // Stop execution if userPhone is not available
+    }
+
+    // Format phone numbers for consistency
+    if (!senderPhoneNumber.startsWith('+')) {
+        senderPhoneNumber = '+$senderPhoneNumber';
+    }
+    if (!userPhone.startsWith('+')) {
+        userPhone = '+$userPhone';
+    }
+
+    print("User Phone: $userPhone");
+    print("Sender Phone Number: $senderPhoneNumber");
+
+    // Generate conversationID
+    final participants = [userPhone, senderPhoneNumber];
+    participants.sort();
+    final conversationID = participants.join('_');
+    print("Generated conversationID: $conversationID");
+
+    // Generate messageID
+    final messageID = '${message.dateSent}_${senderPhoneNumber}';
+    print("Generated messageID: $messageID");
+
+    // Check if the conversation exists
+    final conversationSnapshot = await firestore.collection('conversations').doc(conversationID).get();
+    if (!conversationSnapshot.exists) {
+        print("Creating new conversation with ID: $conversationID");
+        await firestore.collection('conversations').doc(conversationID).set({
+            'participants': participants,
+            'smsUserID': await getSmsUserID(userPhone) ?? "",
+            'lastMessageTimeStamp': Timestamp.now(),
+        });
+    } else {
+        print("Updating existing conversation timestamp for ID: $conversationID");
+        await firestore.collection('conversations').doc(conversationID).update({
+            'lastMessageTimeStamp': Timestamp.now(),
+        });
+    }
+
+    // Add message to messages sub-collection
+    await firestore.collection('conversations').doc(conversationID).collection('messages').doc(messageID).set({
         'messageID': messageID,
-        'senderID': address,
+        'senderID': senderPhoneNumber,
         'content': message.body ?? "",
-        'timestamp': messageTimestamp,
+        'timestamp': message.dateSent != null ? Timestamp.fromMillisecondsSinceEpoch(message.dateSent!) : Timestamp.now(),
         'isIncoming': true,
-      }, SetOptions(merge: true));
+    }, SetOptions(merge: true));
+
+    print("Message stored with ID: $messageID in conversationID: $conversationID");
 }
+
+
+
+Future<String?> getSmsUserID(String userPhone) async {
+  final firestore = FirebaseFirestore.instance;
+
+  // Query Firestore to get the document for the given phone number
+  final snapshot = await firestore
+      .collection('smsUser')
+      .where('phoneNo', isEqualTo: userPhone)
+      .limit(1)
+      .get();
+
+  // Check if we got any document back
+  if (snapshot.docs.isNotEmpty) {
+    // Return the ID of the first document found
+    return snapshot.docs.first.id;
+  }
+
+  // Return null if no document was found
+  return null;
+}
+
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -45,8 +106,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final MethodChannel platform = const MethodChannel("com.tarumt.smsecure/sms");
 
   bool _permissionsGranted = false;
+  bool _isLoading = true;
   Timer? pollTimer;
   String? userPhone;
+  String? smsUserID;
 
   @override
   void initState() {
@@ -63,46 +126,115 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _initialize() async {
-    // Run the default SMS handler check first
-    await _checkAndSetDefaultSmsApp();
+    // Check if contacts and messages were already imported
+    final isContactsImported = await secureStorage.read(key: 'isContactsImported') ?? 'false';
+    final isMessagesImported = await secureStorage.read(key: 'isMessagesImported') ?? 'false';
+
+    if (isContactsImported == 'true' && isMessagesImported == 'true') {
+      setState(() {
+        _isLoading = false; // Skip loading if already imported
+      });
+      return;
+    }
+
+    // Run the default SMS handler check and wait for acceptance
+    bool isDefaultSet = await _checkAndSetDefaultSmsAppWithLoading();
+    if (!isDefaultSet) return; // Stop if not set as default
 
     // Load userPhone from secure storage
-    await _loadUserPhone(); 
+    await _loadUserPhone();
 
-    // Check permissions and start listening to messages if permissions are granted
-    await _checkAndRequestPermissions();
-    if (_permissionsGranted && mounted) {
+    // Check permissions
+    bool permissionsGranted = await _checkAndRequestPermissions();
+    if (!permissionsGranted) {
+      _showPermissionDialog("SMS and Contacts permissions are required to use this app.");
+      return;
+    }
+
+    // Start imports and display loading only if both conditions are met
+    if (permissionsGranted && isDefaultSet && mounted) {
+      setState(() {
+        _isLoading = true; // Show loading while importing
+      });
+
       _startMessageListeners();
-      _importContactsToFirestore(); // Run without await to prevent blocking
+
+      if (isContactsImported != 'true') await _importContactsToFirestore();
+      if (isMessagesImported != 'true') await _importSmsMessages();
+
+      setState(() {
+        _isLoading = false; // Hide loading after import completes
+      });
     }
   }
 
 
-  Future<void> _loadUserPhone() async {
-    userPhone = await secureStorage.read(key: 'userPhone');
-    setState(() {}); // Trigger a rebuild to use the updated userPhone
+
+  void _showPermissionDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text("Permission Required"),
+          content: Text(message),
+          actions: <Widget>[
+            TextButton(
+              child: const Text("Retry"),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _initialize(); // Retry initialization
+              },
+            ),
+            TextButton(
+              child: const Text("Close App"),
+              onPressed: () {
+                Navigator.of(context).pop();
+                SystemNavigator.pop(); // Close the app
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
-  Future<void> _checkAndSetDefaultSmsApp() async {
+  Future<void> _loadUserPhone() async {
+    userPhone = await secureStorage.read(key: 'userPhone');
+    if (userPhone != null) {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('smsUser')
+          .where('phoneNo', isEqualTo: userPhone)
+          .limit(1)
+          .get();
+      smsUserID = snapshot.docs.isNotEmpty ? snapshot.docs.first.id : null;
+    }
+    setState(() {});
+  }
+  
+  Future<bool> _checkAndSetDefaultSmsAppWithLoading() async {
     try {
       print("Checking if app is the default SMS handler"); // Debugging line
       final bool? isDefault = await platform.invokeMethod<bool?>('checkDefaultSms');
       if (isDefault != null && !isDefault) {
         print("App is not the default SMS handler, showing dialog"); // Debugging line
-        _showDefaultSmsDialog();
+        bool userAccepted = await _showDefaultSmsDialog();
+        return userAccepted;
       } else {
         print("App is already the default SMS handler"); // Debugging line
+        return true;
       }
     } catch (e) {
       print("Platform Exception during default SMS check: $e");
+      return false;
     }
   }
 
+  // Modified dialog to return a Future<bool> for user acceptance
+  Future<bool> _showDefaultSmsDialog() async {
+    bool userAccepted = false;
 
-  
-
-  void _showDefaultSmsDialog() {
-    showDialog(
+    await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
@@ -115,18 +247,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             onPressed: () {
               Navigator.of(context).pop();
               _redirectToDefaultSmsSettings();
+              userAccepted = true; // User accepted to change SMS default
             },
-            child: const Text('Go to Settings'),
+            child: const Text('Accept and Go to Settings'),
           ),
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
+              _showPermissionDialog("This app needs to be set as your default SMS handler to continue.");
+              userAccepted = false; // User did not accept
             },
             child: const Text('Cancel'),
           ),
         ],
       ),
     );
+
+    return userAccepted;
   }
 
   void _redirectToDefaultSmsSettings() {
@@ -136,7 +273,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     intent.launch();
   }
 
-  Future<void> _checkAndRequestPermissions() async {
+  Future<bool> _checkAndRequestPermissions() async {
     try {
       bool smsPermissionGranted = await telephony.requestPhoneAndSmsPermissions ?? false;
 
@@ -147,14 +284,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           await _importSmsMessages();
           await secureStorage.write(key: 'isMessagesImported', value: 'true');
         }
+        return true;
       } else {
         _permissionsGranted = false;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('SMS, Phone, or Contacts permissions denied')),
         );
+        return false;
       }
     } catch (e) {
       print('Error requesting permissions: $e');
+      return false;
     }
   }
 
@@ -167,10 +307,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
 
+
     if (_permissionsGranted) {
       print("Importing contacts to Firestore...");
       final FirebaseFirestore firestore = FirebaseFirestore.instance;
 
+      setState(() {
+        _isLoading = true;
+      });
+      
       // Fetch contacts and check for any issues in retrieval
       Iterable<Contact> contacts = [];
       try {
@@ -208,9 +353,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
 
       for (var contact in contacts) {
-        final contactID = contact.id;
+        final contactID = FirebaseFirestore.instance.collection('contact').doc().id;
         final name = contact.displayName;
-        final phoneNo = contact.phones.isNotEmpty ? contact.phones.first.number : 'No Number';
+        String phoneNo = contact.phones.isNotEmpty ? contact.phones.first.number : 'No Number';
+        phoneNo = _formatPhoneNumber(phoneNo);
 
         String? registeredSmsUserID;
         try {
@@ -245,15 +391,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       // Mark contacts as imported in secure storage
       await secureStorage.write(key: 'isContactsImported', value: 'true');
+      setState(() {
+        _isLoading = false;
+      });
       print("Contacts have been successfully imported and marked in secure storage.");
     } else {
       print("Permissions not granted for importing contacts.");
     }
   }
 
+    // Helper function to format phone numbers
+  String _formatPhoneNumber(String phoneNo) {
+    phoneNo = phoneNo.trim();
+    if (phoneNo.startsWith('0')) {
+      return '+6$phoneNo'; // Add +6 if it starts with 0
+    } else if (phoneNo.startsWith('6') && !phoneNo.startsWith('+')) {
+      return '+$phoneNo'; // Add + if it starts with 6 and no +
+    }
+    return phoneNo; // Return as is if it already has correct format
+  }
+
 
 
   Future<void> _importSmsMessages() async {
+    final isMessagesImported = await secureStorage.read(key: 'isMessagesImported') ?? 'false';
+    if (isMessagesImported == 'true') return; // Skip if already imported
+
     try {
       final incomingMessages = await telephony.getInboxSms(
         columns: [SmsColumn.ADDRESS, SmsColumn.BODY, SmsColumn.DATE_SENT, SmsColumn.DATE],
@@ -270,6 +433,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       for (var message in outgoingMessages) {
         await _storeSmsInFirestore(message, isIncoming: false);
       }
+      await secureStorage.write(key: 'isMessagesImported', value: 'true');
+      print("Messages successfully imported to Firestore.");
     } catch (e, stackTrace) {
       print('Error importing SMS messages: $e');
       print('Stack trace: $stackTrace');
@@ -315,8 +480,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       final address = message.address;
       if (address == null || address.isEmpty || userPhone == null) return;
 
-      final conversationID = _generateConversationID(address);
-      final messageID = _generateMessageID(message);
+      // Generate a consistent conversationID based on the two phone numbers
+      final participants = [userPhone, address];
+      participants.sort(); // Alphabetical order ensures consistency
+      final conversationID = participants.join('_');
+
+      final messageID = '${message.dateSent}_${address}';
+
       final messageTimestamp = message.dateSent != null 
           ? Timestamp.fromMillisecondsSinceEpoch(message.dateSent!)
           : Timestamp.now();
@@ -346,7 +516,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             .doc(conversationID)
             .set({
               'lastMessageTimeStamp': messageTimestamp,
-              'participants': [address, userPhone]
+              'participants': participants,
+              'smsUserID': smsUserID ?? '',
             }, SetOptions(merge: true));
       }
     } catch (e, stackTrace) {
@@ -355,23 +526,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  static String _generateConversationID(String? address) {
-    return address?.replaceAll(RegExp(r'[^\w]+'), '') ?? "unknown";
-  }
-
-  static String _generateMessageID(SmsMessage message) {
-    final timestamp = message.dateSent ?? message.date ?? DateTime.now().millisecondsSinceEpoch;
-    final address = message.address ?? "unknown";
-    final body = message.body ?? "";
-    final bodyHash = base64UrlEncode(utf8.encode(body));
-    return '${timestamp}_${address}_$bodyHash'.replaceAll('/', '_');
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Home")),
-      body: const HomePageContent(),
+      body: _isLoading
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 10),
+                  Text("Conversations and contacts are being imported. This may take a moment."),
+                ],
+              ),
+            )
+          : const HomePageContent(),
     );
   }
 }

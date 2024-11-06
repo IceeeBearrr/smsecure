@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
-import 'package:smsecure/Pages/Chat/ChatPage.dart';
 import 'package:smsecure/Pages/Contact/EditContactDetail.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-class ContactDetailsPage extends StatelessWidget {
+class DetailWhitelistContactList extends StatelessWidget {
   final String contactId;
   final storage = FlutterSecureStorage();
 
-  ContactDetailsPage({Key? key, required this.contactId}) : super(key: key);
+  DetailWhitelistContactList({Key? key, required this.contactId}) : super(key: key);
 
   Future<Map<String, dynamic>> _fetchContactDetails() async {
     final firestore = FirebaseFirestore.instance;
-    final contactSnapshot = await firestore.collection('contact').doc(contactId).get();
+    final contactSnapshot = await firestore.collection('whitelist').doc(contactId).get();
     if (contactSnapshot.exists) {
       final contactData = contactSnapshot.data()!;
       String? profileImageUrl;
@@ -49,48 +48,6 @@ class ContactDetailsPage extends StatelessWidget {
         'profileImageUrl': null,
       };
     }
-  }
-
-  Future<void> _sendMessage(BuildContext context, String receiverPhone) async {
-    final firestore = FirebaseFirestore.instance;
-    final userPhone = await storage.read(key: "userPhone");
-
-    if (userPhone == null) {
-      // Handle error if userPhone is not available
-      print("User phone not found in secure storage.");
-      return;
-    }
-
-    // Check for an existing conversation
-    QuerySnapshot conversationSnapshot = await firestore
-        .collection('conversations')
-        .where('participants', arrayContainsAny: [userPhone])
-        .get();
-
-    String? conversationID;
-    for (var doc in conversationSnapshot.docs) {
-      List<dynamic> participants = doc['participants'];
-      if (participants.contains(receiverPhone) && participants.contains(userPhone)) {
-        conversationID = doc.id;
-        break;
-      }
-    }
-
-    if (conversationID == null) {
-      // No conversation found, create a new one
-      DocumentReference newConversation = await firestore.collection('conversations').add({
-        'participants': [userPhone, receiverPhone],
-      });
-      conversationID = newConversation.id;
-    }
-
-    // Navigate to ChatPage with the conversationID
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => Chatpage(conversationID: conversationID!),
-      ),
-    );
   }
 
   @override
@@ -235,12 +192,6 @@ class ContactDetailsPage extends StatelessWidget {
                     ),
                     child: Column(
                       children: [
-                        _buildProfileOption(Icons.message, 'Send Message', onTap: () {
-                          _sendMessage(context, data['phoneNo']);
-                        }),
-                        _buildProfileOption(Icons.person_add, 'Add to Whitelist', onTap: () {
-                          // Implement Add to Whitelist action
-                        }),
                         _buildProfileOption(Icons.edit, 'Edit Contact', onTap: () {
                           Navigator.push(
                             context,
@@ -251,9 +202,6 @@ class ContactDetailsPage extends StatelessWidget {
                         }),
                         _buildProfileOption(Icons.delete, 'Delete Contact', color: Colors.red, onTap: () {
                           // Implement Delete Contact action
-                        }),
-                        _buildProfileOption(Icons.block, 'Blacklist Contact', color: Colors.red, onTap: () {
-                          // Implement Blacklist Contact action
                         }),
                       ],
                     ),

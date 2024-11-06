@@ -1,13 +1,96 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:smsecure/Pages/Chat/Widget/Chat.dart';
 import 'package:smsecure/Pages/Chat/Widget/ChatBottomSheet.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:another_telephony/telephony.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-class Chatpage extends StatelessWidget {
+class Chatpage extends StatefulWidget {
   final String conversationID;
 
   const Chatpage({super.key, required this.conversationID});
+
+  @override
+  _ChatpageState createState() => _ChatpageState();
+}
+
+class _ChatpageState extends State<Chatpage> {
+  final storage = FlutterSecureStorage();
+  String? participantName;
+  String? profileImageBase64;
+  bool isLoading = true;
+  String? userPhone; // Stores the current user's phone number
+
+  @override
+  void initState() {
+    super.initState();
+    loadParticipantDetails();
+  }
+
+  Future<void> loadParticipantDetails() async {
+    // Retrieve current user's phone number from secure storage
+    userPhone = await storage.read(key: "userPhone");
+    if (userPhone == null) return;
+
+    // Fetch conversation details
+    DocumentSnapshot conversationSnapshot = await FirebaseFirestore.instance
+        .collection('conversations')
+        .doc(widget.conversationID)
+        .get();
+
+    if (!conversationSnapshot.exists) return;
+
+    // Get participant's phone number from the conversation
+    var participants = List<String>.from(conversationSnapshot['participants']);
+    String otherUserPhone = participants.firstWhere((phone) => phone != userPhone, orElse: () => 'Unknown');
+
+    // Fetch participant's details from Firestore
+    final contactSnapshot = await FirebaseFirestore.instance
+        .collection('contact')
+        .where('phoneNo', isEqualTo: otherUserPhone)
+        .get();
+
+    if (contactSnapshot.docs.isNotEmpty) {
+      var contactData = contactSnapshot.docs.first.data();
+      String? name = contactData['name'];
+      String? profileImageUrl = contactData['profileImageUrl'];
+      String? registeredSmsUserID = contactData['registeredSmsUserID'];
+
+      if (profileImageUrl != null && profileImageUrl.isNotEmpty) {
+        setState(() {
+          participantName = name;
+          profileImageBase64 = profileImageUrl;
+          isLoading = false;
+        });
+      } else if (registeredSmsUserID != null && registeredSmsUserID.isNotEmpty) {
+        final registeredSmsUserSnapshot = await FirebaseFirestore.instance
+            .collection('smsUser')
+            .doc(registeredSmsUserID)
+            .get();
+
+        if (registeredSmsUserSnapshot.exists && registeredSmsUserSnapshot.data()!['profileImageUrl'] != null) {
+          setState(() {
+            participantName = name;
+            profileImageBase64 = registeredSmsUserSnapshot.data()!['profileImageUrl'];
+            isLoading = false;
+          });
+        }
+      } else {
+        setState(() {
+          participantName = name;
+          profileImageBase64 = null;
+          isLoading = false;
+        });
+      }
+    } else {
+      setState(() {
+        participantName = otherUserPhone; // Default to phone number if name is unavailable
+        profileImageBase64 = null;
+        isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,17 +107,28 @@ class Chatpage extends StatelessWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(30),
-                  child: Image.asset(
-                    "images/HomePage/defaultProfile.png",
-                    height: 45,
-                    width: 45,
-                  ),
+                  child: isLoading
+                      ? const CircularProgressIndicator()
+                      : profileImageBase64 != null
+                          ? Image.memory(
+                              base64Decode(profileImageBase64!),
+                              height: 45,
+                              width: 45,
+                              fit: BoxFit.cover,
+                            )
+                          : Image.asset(
+                              "images/HomePage/defaultProfile.png",
+                              height: 45,
+                              width: 45,
+                            ),
                 ),
-                const Padding(
-                  padding: EdgeInsets.only(left: 10),
-                  child: Text(
-                    "Programmer",
-                    style: TextStyle(color: Color(0xFF113953)),
+                const SizedBox(width: 10),
+                Text(
+                  isLoading ? "Loading..." : participantName ?? "Unknown",
+                  style: const TextStyle(            
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF113953),
                   ),
                 ),
               ],
@@ -46,14 +140,6 @@ class Chatpage extends StatelessWidget {
                   Icons.call,
                   color: Color(0xFF113953),
                   size: 26,
-                ),
-              ),
-              Padding(
-                padding: EdgeInsets.only(right: 25),
-                child: Icon(
-                  Icons.video_call,
-                  color: Color(0xFF113953),
-                  size: 30,
                 ),
               ),
               Padding(
@@ -71,11 +157,11 @@ class Chatpage extends StatelessWidget {
       body: Column(
         children: [
           Expanded(
-            child: Chat(conversationID: conversationID),
+            child: Chat(conversationID: widget.conversationID),
           ),
           Chatbottomsheet(
             onSendMessage: (String messageContent) {
-              _sendMessage(messageContent, conversationID, currentUserName);
+              _sendMessage(messageContent, widget.conversationID, currentUserName);
             },
           ),
         ],
@@ -83,53 +169,52 @@ class Chatpage extends StatelessWidget {
     );
   }
 
-  void _sendMessage(String messageContent, String conversationID, String currentUserName) async {
+  Future<void> _sendMessage(String messageContent, String conversationID, String currentUserName) async {
     final firestore = FirebaseFirestore.instance;
 
-    // Example IDs, these should be dynamically generated or passed
-    String senderID = "Janice";
-    String receiverID = "Jeffer";
-    String receiverPhoneNumber = "+6019-5753479";
+    // Retrieve current user's phone number from secure storage if not already loaded
+    userPhone ??= await storage.read(key: "userPhone");
 
-    debugPrint("Sending message: $messageContent");
+    if (userPhone == null) {
+      debugPrint("User phone number not found in secure storage.");
+      return;
+    }
 
-    // Check if conversation exists
-    DocumentSnapshot conversationSnapshot =
-        await firestore.collection('conversations').doc(conversationID).get();
+    // Fetch conversation details to determine senderID and receiverPhoneNumber
+    DocumentSnapshot conversationSnapshot = await firestore.collection('conversations').doc(conversationID).get();
 
     if (!conversationSnapshot.exists) {
-      // Create a new conversation document
-      await firestore.collection('conversations').doc(conversationID).set({
-        'conversationID': conversationID,
-        'senderID': senderID,
-        'receiverID': receiverID,
-        'createdAt': DateTime.now(),
-        'lastMessageTimeStamp': DateTime.now(),
-        'pin': '', // Add other fields as necessary
-      });
-      debugPrint("Created new conversation with ID $conversationID");
+      debugPrint("Conversation does not exist.");
+      return;
     }
+
+    var participants = List<String>.from(conversationSnapshot['participants']);
+    String senderID = participants.firstWhere((phone) => phone == userPhone, orElse: () => "Unknown");
+    String receiverPhoneNumber = participants.firstWhere((phone) => phone != userPhone, orElse: () => "Unknown");
+
+    debugPrint("Sending message from $senderID to $receiverPhoneNumber: $messageContent");
+    final messageID = '${DateTime.now().millisecondsSinceEpoch}_$receiverPhoneNumber';
 
     // Add the message to the sub-collection
     await firestore
         .collection('conversations')
         .doc(conversationID)
         .collection('messages')
-        .add({
+        .doc(messageID)
+        .set({
       'senderID': senderID,
-      'receiverID': receiverID,
+      'receiverID': receiverPhoneNumber,
       'content': messageContent,
       'timestamp': DateTime.now(),
     });
-    debugPrint("Message sent: $messageContent");
 
     // Update the lastMessageTimeStamp in the conversation document
     await firestore.collection('conversations').doc(conversationID).update({
       'lastMessageTimeStamp': DateTime.now(),
     });
 
+    // Send the SMS to the receiver's phone number
     final Telephony telephony = Telephony.instance;
-
     await telephony.sendSms(
       to: receiverPhoneNumber,
       message: messageContent,

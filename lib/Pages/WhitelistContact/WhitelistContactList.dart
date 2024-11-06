@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
-import 'package:smsecure/Pages/Contact/ContactDetail.dart';
+import 'package:smsecure/Pages/WhitelistContact/DetailWhitelistContactList.dart';
 
-class ContactList extends StatelessWidget {
+class WhitelistContactList extends StatelessWidget {
   final String currentUserID;
 
-  const ContactList({super.key, required this.currentUserID});
+  const WhitelistContactList({super.key, required this.currentUserID});
 
   Future<String?> _getProfileImageUrl(String contactId, String? registeredSMSUserID) async {
     final contactDoc = await FirebaseFirestore.instance.collection('contact').doc(contactId).get();
@@ -190,7 +190,7 @@ class ContactList extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => ContactDetailsPage(contactId: contactId),
+                      builder: (context) => DetailWhitelistContactList(contactId: contactId),
                     ),
                   );
                 },

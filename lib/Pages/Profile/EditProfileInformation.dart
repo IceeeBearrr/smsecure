@@ -133,7 +133,7 @@ class _EditProfileInformationState extends State<EditProfileInformation> {
                   Navigator.pop(context);
                   final pickedFile = await _picker.pickImage(source: ImageSource.camera);
                   if (pickedFile != null) {
-                    await _cropImage(File(pickedFile.path));
+                    await _checkAndCropImage(File(pickedFile.path));
                   }
                 },
               ),
@@ -144,7 +144,7 @@ class _EditProfileInformationState extends State<EditProfileInformation> {
                   Navigator.pop(context);
                   final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
                   if (pickedFile != null) {
-                    await _cropImage(File(pickedFile.path));
+                    await _checkAndCropImage(File(pickedFile.path));
                   }
                 },
               ),
@@ -155,48 +155,85 @@ class _EditProfileInformationState extends State<EditProfileInformation> {
     );
   }
 
+  Future<void> _checkAndCropImage(File imageFile) async {
+    final int fileSize = await imageFile.length();
+    if (fileSize > 1048576) { // 1 MB limit check
+      _showFileSizeError(); // Show error message
+      return; // Exit the function without proceeding to crop
+    }
+
+    // Crop the image if it meets the size limit
+    await _cropImage(imageFile);
+  }
+  
   Future<void> _cropImage(File imageFile) async {
     final croppedFile = await ImageCropper().cropImage(
       sourcePath: imageFile.path,
-      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1), // Enforce 1:1 aspect ratio
-      aspectRatioPresets: [
-        CropAspectRatioPreset.square, // Only allow square aspect ratio
-      ],
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
       uiSettings: [
         AndroidUiSettings(
           toolbarTitle: 'Crop Image',
-          toolbarColor: const Color.fromARGB(255, 47, 77, 129),
+          toolbarColor: Colors.blue,
           toolbarWidgetColor: Colors.white,
-          initAspectRatio: CropAspectRatioPreset.square,
-          lockAspectRatio: true, // Lock the aspect ratio to 1:1
+          lockAspectRatio: true,
         ),
         IOSUiSettings(
-          minimumAspectRatio: 1.0, // Lock aspect ratio to 1:1 on iOS
+          minimumAspectRatio: 1.0,
         ),
       ],
     );
 
     if (croppedFile != null) {
-      // Copy the cropped file to the application's documents directory
-      final directory = await getApplicationDocumentsDirectory();
-      final path = directory.path;
-      final newImage = await File(croppedFile.path).copy('$path/profile_image.png');
+      final int fileSize = await File(croppedFile.path).length();
+      if (fileSize > 1048576) { // Check if file size is greater than 1 MB (1 MB = 1048576 bytes)
+        _showFileSizeError();
+        return; // Exit the function if file size is too large
+      }
 
       setState(() {
-        _selectedImage = newImage;
+        _selectedImage = File(croppedFile.path);
       });
+      _profileImageBase64 = await _convertImageToBase64(File(croppedFile.path));
     }
+  }
+
+  void _showFileSizeError() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text("File Size Exceeded"),
+          content: const Text("The selected image is larger than 1 MB. Please choose a smaller image."),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog
+              },
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<String?> _convertImageToBase64(File imageFile) async {
     try {
       final bytes = await imageFile.readAsBytes();
+
+      // Check if file size exceeds 1 MB
+      if (bytes.length > 1048487) {
+        _showFileSizeError();
+        return null; // Return null if file is too large
+      }
+
       return base64Encode(bytes);
     } catch (e) {
       print("Error converting image to Base64: $e");
       return null;
     }
   }
+
 
   Future<void> _submit() async {
     final FirebaseFirestore firestore = FirebaseFirestore.instance;
