@@ -1,53 +1,99 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
-import 'package:smsecure/Pages/Contact/EditContactDetail.dart';
+import 'package:smsecure/Pages/Chat/ChatPage.dart';
+import 'package:smsecure/Pages/WhitelistContact/EditWhitelistContact.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-class DetailWhitelistContactList extends StatelessWidget {
-  final String contactId;
+class WhitelistDetailsPage extends StatelessWidget {
+  final String whitelistId;
   final storage = FlutterSecureStorage();
 
-  DetailWhitelistContactList({Key? key, required this.contactId}) : super(key: key);
+  WhitelistDetailsPage({Key? key, required this.whitelistId}) : super(key: key);
 
-  Future<Map<String, dynamic>> _fetchContactDetails() async {
+  Future<Map<String, dynamic>> _fetchWhitelistDetails() async {
     final firestore = FirebaseFirestore.instance;
-    final contactSnapshot = await firestore.collection('whitelist').doc(contactId).get();
-    if (contactSnapshot.exists) {
-      final contactData = contactSnapshot.data()!;
+    final whitelistSnapshot = await firestore.collection('whitelist').doc(whitelistId).get();
+    
+    if (whitelistSnapshot.exists) {
+      final whitelistData = whitelistSnapshot.data()!;
+      final phoneNo = whitelistData['phoneNo'];
+      final name = whitelistData['name'] ?? phoneNo;
       String? profileImageUrl;
 
-      // Step 1: Check if the contact document has a profileImageUrl
-      if (contactData['profileImageUrl'] != null && contactData['profileImageUrl'].isNotEmpty) {
+      // Attempt to retrieve profile image from contact collection
+      final contactSnapshot = await firestore
+          .collection('contact')
+          .where('phoneNo', isEqualTo: phoneNo)
+          .limit(1)
+          .get();
+
+      if (contactSnapshot.docs.isNotEmpty) {
+        final contactData = contactSnapshot.docs.first.data();
         profileImageUrl = contactData['profileImageUrl'];
-      } else if (contactData['registeredSMSUserID'] != null && contactData['registeredSMSUserID'].isNotEmpty) {
-        // Step 2: If no profileImageUrl in contact, check for registeredSMSUserID and fetch the corresponding smsUser document
-        final smsUserId = contactData['registeredSMSUserID'];
-        final smsUserSnapshot = await firestore.collection('smsUser').doc(smsUserId).get();
-        if (smsUserSnapshot.exists) {
-          profileImageUrl = smsUserSnapshot.data()?['profileImageUrl'];
+        
+        // If no profileImageUrl, check registeredSMSUserID for smsUser profile image
+        if (profileImageUrl == null || profileImageUrl.isEmpty) {
+          final registeredSMSUserID = contactData['registeredSMSUserID'];
+          if (registeredSMSUserID != null && registeredSMSUserID.isNotEmpty) {
+            final smsUserDoc = await firestore.collection('smsUser').doc(registeredSMSUserID).get();
+            if (smsUserDoc.exists) {
+              profileImageUrl = smsUserDoc.data()?['profileImageUrl'];
+            }
+          }
         }
       }
-
-      // Retrieve other fields from contact document
-      String name = contactData['name'] ?? 'No Name';
-      String phoneNo = contactData['phoneNo'] ?? 'No Number';
-      String note = contactData['note'] ?? 'No note';
 
       return {
         'name': name,
         'phoneNo': phoneNo,
-        'note': note,
         'profileImageUrl': profileImageUrl,
       };
     } else {
       return {
         'name': 'No Name',
         'phoneNo': 'No Number',
-        'note': 'No note',
         'profileImageUrl': null,
       };
     }
+  }
+
+  Future<void> _sendMessage(BuildContext context, String receiverPhone) async {
+    final firestore = FirebaseFirestore.instance;
+    final userPhone = await storage.read(key: "userPhone");
+
+    if (userPhone == null) {
+      print("User phone not found in secure storage.");
+      return;
+    }
+
+    QuerySnapshot conversationSnapshot = await firestore
+        .collection('conversations')
+        .where('participants', arrayContainsAny: [userPhone])
+        .get();
+
+    String? conversationID;
+    for (var doc in conversationSnapshot.docs) {
+      List<dynamic> participants = doc['participants'];
+      if (participants.contains(receiverPhone) && participants.contains(userPhone)) {
+        conversationID = doc.id;
+        break;
+      }
+    }
+
+    if (conversationID == null) {
+      DocumentReference newConversation = await firestore.collection('conversations').add({
+        'participants': [userPhone, receiverPhone],
+      });
+      conversationID = newConversation.id;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => Chatpage(conversationID: conversationID!),
+      ),
+    );
   }
 
   @override
@@ -55,7 +101,7 @@ class DetailWhitelistContactList extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Contact',
+          'Whitelist Contact',
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.bold,
@@ -71,16 +117,16 @@ class DetailWhitelistContactList extends StatelessWidget {
         elevation: 0,
       ),
       body: FutureBuilder<Map<String, dynamic>>(
-        future: _fetchContactDetails(),
+        future: _fetchWhitelistDetails(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return const Center(child: Text("Error fetching contact details"));
+            return const Center(child: Text("Error fetching whitelist details"));
           }
           if (!snapshot.hasData) {
-            return const Center(child: Text("No contact details available"));
+            return const Center(child: Text("No whitelist details available"));
           }
 
           final data = snapshot.data!;
@@ -99,7 +145,7 @@ class DetailWhitelistContactList extends StatelessWidget {
                     CircleAvatar(
                       radius: 50,
                       backgroundColor: Colors.grey[300],
-                      backgroundImage: profileImage,
+                      backgroundImage: profileImage as ImageProvider<Object>?,
                       child: profileImage == null
                           ? const Icon(Icons.person, size: 50, color: Colors.white)
                           : null,
@@ -119,55 +165,28 @@ class DetailWhitelistContactList extends StatelessWidget {
                         color: Colors.grey[100],
                         borderRadius: BorderRadius.circular(15),
                       ),
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            const Text(
+                              'Mobile',
+                              style: TextStyle(fontSize: 16),
                             ),
-                            child: Row(
-                              children: [
-                                const Text(
-                                  'Mobile',
-                                  style: TextStyle(fontSize: 16),
-                                ),
-                                Spacer(),
-                                Text(
-                                  data['phoneNo'],
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
+                            Spacer(),
+                            Text(
+                              data['phoneNo'],
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 10),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Notes',
-                                  style: TextStyle(fontSize: 16),
-                                ),
-                                const SizedBox(height: 5),
-                                Text(
-                                  data['note'],
-                                  style: const TextStyle(fontSize: 16, color: Colors.black54),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -196,12 +215,12 @@ class DetailWhitelistContactList extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => EditContactPage(contactId: contactId),
+                              builder: (context) => EditWhitelistPage(whitelistId: whitelistId),
                             ),
                           );
                         }),
-                        _buildProfileOption(Icons.delete, 'Delete Contact', color: Colors.red, onTap: () {
-                          // Implement Delete Contact action
+                        _buildProfileOption(Icons.delete, 'Remove from Whitelist', color: Colors.red, onTap: () {
+                          // Implement Remove from Whitelist action
                         }),
                       ],
                     ),

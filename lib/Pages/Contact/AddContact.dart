@@ -244,6 +244,7 @@ class _AddContactPageState extends State<AddContactPage> {
         String documentID = firestore.collection('whitelist').doc().id;
         await firestore.collection('whitelist').doc(documentID).set({
           'smsUserID': smsUserID,
+          'name': _nameController.text,
           'phoneNo': contactPhoneNumber,
         });
       }

@@ -1,37 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
-import 'package:smsecure/Pages/WhitelistContact/DetailWhitelistContactList.dart';
+import 'package:smsecure/Pages/WhitelistContact/WhitelistDetail.dart';
 
-class WhitelistContactList extends StatelessWidget {
+class WhitelistList extends StatelessWidget {
   final String currentUserID;
 
-  const WhitelistContactList({super.key, required this.currentUserID});
+  const WhitelistList({super.key, required this.currentUserID});
 
-  Future<String?> _getProfileImageUrl(String contactId, String? registeredSMSUserID) async {
-    final contactDoc = await FirebaseFirestore.instance.collection('contact').doc(contactId).get();
+  Future<String?> _getProfileImageUrl(String phoneNo, String? registeredSMSUserID) async {
+    final contactQuerySnapshot = await FirebaseFirestore.instance
+        .collection('contact')
+        .where('phoneNo', isEqualTo: phoneNo)
+        .limit(1)
+        .get();
 
-    if (contactDoc.exists) {
-      final contactData = contactDoc.data();
-      final profileImageUrl = contactData?['profileImageUrl'];
+    if (contactQuerySnapshot.docs.isNotEmpty) {
+      final contactData = contactQuerySnapshot.docs.first.data();
 
+      // First, check if the contact has a profileImageUrl
+      String? profileImageUrl = contactData['profileImageUrl'];
       if (profileImageUrl != null && profileImageUrl.isNotEmpty) {
-        return profileImageUrl;
+        return profileImageUrl; // Return this if it exists and is not empty
       }
 
-      final smsUserId = contactData?['registeredSMSUserID'] ?? registeredSMSUserID;
+      // If no profileImageUrl, check for a registeredSMSUserID
+      final smsUserId = contactData['registeredSMSUserID'] ?? registeredSMSUserID;
       if (smsUserId != null && smsUserId.isNotEmpty) {
         final smsUserDoc = await FirebaseFirestore.instance.collection('smsUser').doc(smsUserId).get();
         if (smsUserDoc.exists) {
-          final smsUserData = smsUserDoc.data();
-          final smsProfileImageUrl = smsUserData?['profileImageUrl'];
-          if (smsProfileImageUrl != null && smsProfileImageUrl.isNotEmpty) {
-            return smsProfileImageUrl;
+          profileImageUrl = smsUserDoc.data()?['profileImageUrl'];
+          if (profileImageUrl != null && profileImageUrl.isNotEmpty) {
+            return profileImageUrl; // Return this if it exists and is not empty
           }
         }
       }
     }
-    return null;
+    return null; // Return null if no valid profileImageUrl found
   }
 
   @override
@@ -56,51 +61,53 @@ class WhitelistContactList extends StatelessWidget {
       ),
       child: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('contact')
+            .collection('whitelist')
             .where('smsUserID', isEqualTo: currentUserID)
-            .orderBy('name')
             .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+        builder: (context, whitelistSnapshot) {
+          if (whitelistSnapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text("No contacts available"));
+          if (!whitelistSnapshot.hasData || whitelistSnapshot.data!.docs.isEmpty) {
+            return const Center(child: Text("No whitelist contacts available"));
           }
 
-          var contacts = snapshot.data!.docs;
+          var whitelistContacts = whitelistSnapshot.data!.docs;
 
           return Scrollbar(
             thumbVisibility: true,
             thickness: 8.0,
             radius: const Radius.circular(8),
             child: ListView.builder(
-              itemCount: contacts.length,
+              itemCount: whitelistContacts.length,
               itemBuilder: (context, index) {
-                var contact = contacts[index];
-                var contactName = contact['name'] ?? '';
-                var contactPhone = contact['phoneNo'] ?? '';
+                var whitelistEntry = whitelistContacts[index];
+                var contactName = whitelistEntry['name'] ?? '';
+                var phoneNo = whitelistEntry['phoneNo'];
+                var registeredSMSUserID = whitelistEntry['smsUserID'];
 
-                // Check if contactName is numeric. If so, display only the phone number as the name
-                final isNumericName = int.tryParse(contactName) != null;
-                final displayName = isNumericName ? contactPhone : contactName;
-                final displayPhone = isNumericName ? '' : contactPhone;
+                return FutureBuilder<String?>(
+                  future: _getProfileImageUrl(phoneNo, registeredSMSUserID),
+                  builder: (context, profileImageSnapshot) {
+                    final profileImageUrl = profileImageSnapshot.data;
+                    
+                    // Check if contactName is numeric. If so, display only the phone number as the name
+                    final isNumericName = int.tryParse(contactName) != null;
+                    final displayName = isNumericName ? phoneNo : contactName;
+                    final displayPhone = isNumericName ? '' : phoneNo;
 
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  child: GestureDetector(
-                    onLongPress: () {
-                      _showContactOptions(context, displayName, contact.id);
-                    },
-                    child: FutureBuilder<String?>(
-                      future: _getProfileImageUrl(contact.id, contact['registeredSMSUserID']),
-                      builder: (context, snapshot) {
-                        final profileImage = snapshot.hasData && snapshot.data!.isNotEmpty
-                            ? MemoryImage(base64Decode(snapshot.data!))
-                            : AssetImage("images/HomePage/defaultProfile.png") as ImageProvider;
+                    final profileImage = profileImageUrl != null && profileImageUrl.isNotEmpty
+                        ? MemoryImage(base64Decode(profileImageUrl))
+                        : const AssetImage("images/HomePage/defaultProfile.png") as ImageProvider;
 
-                        return SizedBox(
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      child: GestureDetector(
+                        onLongPress: () {
+                          _showContactOptions(context, displayName, whitelistEntry.id);
+                        },
+                        child: SizedBox(
                           height: 65,
                           child: Row(
                             children: [
@@ -148,10 +155,10 @@ class WhitelistContactList extends StatelessWidget {
                               ),
                             ],
                           ),
-                        );
-                      },
-                    ),
-                  ),
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
             ),
@@ -190,29 +197,14 @@ class WhitelistContactList extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => DetailWhitelistContactList(contactId: contactId),
+                      builder: (context) => WhitelistDetailsPage(whitelistId: contactId),
                     ),
                   );
                 },
               ),
               ListTile(
-                title: const Text('Add to Whitelist'),
-                onTap: () {
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
                 title: const Text(
-                  'Blacklist Contact',
-                  style: TextStyle(color: Colors.red),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                title: const Text(
-                  'Delete Contact',
+                  'Remove from Whitelist',
                   style: TextStyle(color: Colors.red),
                 ),
                 onTap: () {
@@ -228,6 +220,6 @@ class WhitelistContactList extends StatelessWidget {
   }
 
   void _deleteContact(String contactId) {
-    FirebaseFirestore.instance.collection('contact').doc(contactId).delete();
+    FirebaseFirestore.instance.collection('whitelist').doc(contactId).delete();
   }
 }

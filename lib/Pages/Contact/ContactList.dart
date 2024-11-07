@@ -34,6 +34,59 @@ class ContactList extends StatelessWidget {
     return null;
   }
 
+  Future<void> _addToWhitelist(BuildContext context, String contactId) async {
+    final firestore = FirebaseFirestore.instance;
+
+    try {
+      // Fetch the contact details
+      final contactDoc = await firestore.collection('contact').doc(contactId).get();
+      if (contactDoc.exists) {
+        final contactData = contactDoc.data();
+        final name = contactData?['name'];
+        final phoneNo = contactData?['phoneNo'];
+        final smsUserID = contactData?['smsUserID'];
+
+        if (name != null && phoneNo != null && smsUserID != null) {
+          // Add to whitelist collection
+          await firestore.collection('whitelist').add({
+            'name': name,
+            'phoneNo': phoneNo,
+            'smsUserID': smsUserID,
+          });
+          _showMessageDialog(context, "Success", "Contact added to whitelist successfully.");
+        } else {
+          _showMessageDialog(context, "Error", "Failed to retrieve contact details.");
+        }
+      } else {
+        _showMessageDialog(context, "Error", "Contact not found.");
+      }
+    } catch (e) {
+      _showMessageDialog(context, "Error", "Error adding to whitelist: $e");
+    }
+  }
+
+  void _showMessageDialog(BuildContext context, String title, String message) {
+    showDialog(
+      context: Navigator.of(context, rootNavigator: true).context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -199,6 +252,7 @@ class ContactList extends StatelessWidget {
                 title: const Text('Add to Whitelist'),
                 onTap: () {
                   Navigator.pop(context);
+                  _addToWhitelist(context, contactId); // Pass the valid context from the parent widget
                 },
               ),
               ListTile(

@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:smsecure/Pages/WhitelistContact/WhitelistContactList.dart';
+import 'WhitelistList.dart'; // Assuming this new widget will load the whitelist contacts
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:smsecure/Pages/Contact/AddContact.dart';
+import 'package:smsecure/Pages/WhitelistContact/AddWhitelist.dart';
 
 // Initialize Flutter Secure Storage instance
 const FlutterSecureStorage secureStorage = FlutterSecureStorage();
 
-class WhitelistContactPage extends StatefulWidget {
-  const WhitelistContactPage({super.key});
+class WhitelistPage extends StatefulWidget {
+  const WhitelistPage({super.key});
 
   @override
-  State<WhitelistContactPage> createState() => _WhitelistContactPageState();
+  State<WhitelistPage> createState() => _WhitelistPageState();
 }
 
-class _WhitelistContactPageState extends State<WhitelistContactPage> {
+class _WhitelistPageState extends State<WhitelistPage> {
   String? userPhone;
   String? currentSmsUserID;
 
@@ -49,13 +49,13 @@ class _WhitelistContactPageState extends State<WhitelistContactPage> {
   }
 
   Future<void> _navigateToAddContact() async {
-    // Navigate to AddContactPage and wait for the result
+    // Navigate to AddWhitelistPage and wait for the result
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const AddContactPage()),
+      MaterialPageRoute(builder: (context) => const AddWhitelistPage()),
     );
 
-    // If a new contact was added, refresh the contact list
+    // If a new contact was added, refresh the whitelist
     if (result == true) {
       _loadUserPhone(); // Call this to refresh the data or any other function that reloads the contacts
     }
@@ -64,21 +64,29 @@ class _WhitelistContactPageState extends State<WhitelistContactPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          "Whitelisted Contacts",
+          style: TextStyle(
+            color: Color(0xFF113953),
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF113953)),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+      ),
       body: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 25, right: 260, bottom: 25),
-            child: Text(
-              "Contacts",
-              style: TextStyle(
-                color: Color(0xFF113953),
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
+          const SizedBox(height: 20),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15),
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
             child: Row(
               children: [
                 Expanded(
@@ -129,11 +137,10 @@ class _WhitelistContactPageState extends State<WhitelistContactPage> {
               ],
             ),
           ),
-
-          const SizedBox(height: 10),
+          const SizedBox(height: 20),
           Expanded(
             child: (userPhone != null && currentSmsUserID != null)
-                ? WhitelistContactList(currentUserID: currentSmsUserID!)
+                ? WhitelistList(currentUserID: currentSmsUserID!) // Display whitelist contacts
                 : const Center(child: CircularProgressIndicator()),
           ),
         ],

@@ -14,6 +14,19 @@ class ContactDetailsPage extends StatelessWidget {
   Future<Map<String, dynamic>> _fetchContactDetails() async {
     final firestore = FirebaseFirestore.instance;
     final contactSnapshot = await firestore.collection('contact').doc(contactId).get();
+    String? userPhone = await storage.read(key: "userPhone");
+    String? smsUserID;
+
+    final QuerySnapshot findSmsUserIDSnapshot = await firestore
+      .collection('smsUser')
+      .where('phoneNo', isEqualTo: userPhone)
+      .limit(1)
+      .get();
+
+    if (findSmsUserIDSnapshot.docs.isNotEmpty) {
+      smsUserID = findSmsUserIDSnapshot.docs.first.id;
+    }
+      
     if (contactSnapshot.exists) {
       final contactData = contactSnapshot.data()!;
       String? profileImageUrl;
@@ -29,7 +42,7 @@ class ContactDetailsPage extends StatelessWidget {
           profileImageUrl = smsUserSnapshot.data()?['profileImageUrl'];
         }
       }
-
+    
       // Retrieve other fields from contact document
       String name = contactData['name'] ?? 'No Name';
       String phoneNo = contactData['phoneNo'] ?? 'No Number';
@@ -40,6 +53,7 @@ class ContactDetailsPage extends StatelessWidget {
         'phoneNo': phoneNo,
         'note': note,
         'profileImageUrl': profileImageUrl,
+        'smsUserID': smsUserID,  
       };
     } else {
       return {
@@ -47,9 +61,48 @@ class ContactDetailsPage extends StatelessWidget {
         'phoneNo': 'No Number',
         'note': 'No note',
         'profileImageUrl': null,
+        'smsUserID': smsUserID,  
       };
     }
   }
+  
+
+  Future<void> _addToWhitelist(BuildContext context, Map<String, dynamic> contactData) async {
+    final firestore = FirebaseFirestore.instance;
+
+    try {
+      await firestore.collection('whitelist').add({
+        'name': contactData['name'],
+        'phoneNo': contactData['phoneNo'],
+        'smsUserID': contactData['smsUserID'],
+      });
+      _showMessageDialog(context, "Success", "Contact added to whitelist successfully.");
+    } catch (e) {
+      _showMessageDialog(context, "Error", "Error adding to whitelist: $e");
+    }
+  }
+
+
+  void _showMessageDialog(BuildContext context, String title, String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
 
   Future<void> _sendMessage(BuildContext context, String receiverPhone) async {
     final firestore = FirebaseFirestore.instance;
@@ -239,7 +292,7 @@ class ContactDetailsPage extends StatelessWidget {
                           _sendMessage(context, data['phoneNo']);
                         }),
                         _buildProfileOption(Icons.person_add, 'Add to Whitelist', onTap: () {
-                          // Implement Add to Whitelist action
+                          _addToWhitelist(context, data);
                         }),
                         _buildProfileOption(Icons.edit, 'Edit Contact', onTap: () {
                           Navigator.push(
