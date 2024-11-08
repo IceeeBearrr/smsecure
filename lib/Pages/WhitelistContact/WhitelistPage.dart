@@ -17,6 +17,7 @@ class WhitelistPage extends StatefulWidget {
 class _WhitelistPageState extends State<WhitelistPage> {
   String? userPhone;
   String? currentSmsUserID;
+  String searchText = ""; // State to store search input
 
   @override
   void initState() {
@@ -26,7 +27,7 @@ class _WhitelistPageState extends State<WhitelistPage> {
 
   Future<void> _loadUserPhone() async {
     userPhone = await secureStorage.read(key: 'userPhone');
-    setState(() {}); // Trigger a rebuild to update the UI with the userPhone if needed
+    setState(() {});
 
     if (userPhone != null) {
       await _findSmsUserID();
@@ -44,20 +45,18 @@ class _WhitelistPageState extends State<WhitelistPage> {
 
     if (findSmsUserIDSnapshot.docs.isNotEmpty) {
       currentSmsUserID = findSmsUserIDSnapshot.docs.first.id;
-      setState(() {}); // Trigger a rebuild to update the UI with the currentSmsUserID
+      setState(() {});
     }
   }
 
   Future<void> _navigateToAddContact() async {
-    // Navigate to AddWhitelistPage and wait for the result
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const AddWhitelistPage()),
     );
 
-    // If a new contact was added, refresh the whitelist
     if (result == true) {
-      _loadUserPhone(); // Call this to refresh the data or any other function that reloads the contacts
+      _loadUserPhone();
     }
   }
 
@@ -115,9 +114,14 @@ class _WhitelistPageState extends State<WhitelistPage> {
                             padding: const EdgeInsets.symmetric(horizontal: 15),
                             child: TextFormField(
                               decoration: const InputDecoration(
-                                hintText: "Search",
+                                hintText: "Search by name or phone number",
                                 border: InputBorder.none,
                               ),
+                              onChanged: (value) {
+                                setState(() {
+                                  searchText = value.trim().toLowerCase(); // Update search text
+                                });
+                              },
                             ),
                           ),
                         ),
@@ -125,7 +129,7 @@ class _WhitelistPageState extends State<WhitelistPage> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 10), // Spacing between search bar and add button
+                const SizedBox(width: 10),
                 GestureDetector(
                   onTap: _navigateToAddContact,
                   child: const Icon(
@@ -140,7 +144,10 @@ class _WhitelistPageState extends State<WhitelistPage> {
           const SizedBox(height: 20),
           Expanded(
             child: (userPhone != null && currentSmsUserID != null)
-                ? WhitelistList(currentUserID: currentSmsUserID!) // Display whitelist contacts
+                ? WhitelistList(
+                    currentUserID: currentSmsUserID!,
+                    searchText: searchText, // Pass search text
+                  )
                 : const Center(child: CircularProgressIndicator()),
           ),
         ],
@@ -148,3 +155,4 @@ class _WhitelistPageState extends State<WhitelistPage> {
     );
   }
 }
+

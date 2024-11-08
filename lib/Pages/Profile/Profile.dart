@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:smsecure/Pages/Profile/ProfileInformation.dart';
 import 'package:smsecure/Pages/WhitelistContact/WhitelistPage.dart';
+import 'package:smsecure/Pages/BlacklistContact/BlacklistPage.dart';
 
 const FlutterSecureStorage secureStorage = FlutterSecureStorage();
 
@@ -160,7 +161,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const ProfileInformation(),
+                              builder: (context) => const BlacklistPage(),
                             ),
                           ).then((_) {
                             _loadUserData(); // Reload data when returning

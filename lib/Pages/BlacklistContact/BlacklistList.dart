@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
-import 'package:smsecure/Pages/WhitelistContact/WhitelistDetail.dart';
+import 'package:smsecure/Pages/BlacklistContact/BlacklistDetail.dart';
 
-class WhitelistList extends StatelessWidget {
+class BlacklistList extends StatelessWidget {
   final String currentUserID;
-  final String searchText;
+  final String searchText; // Accept search text for filtering
 
-  const WhitelistList({super.key, required this.currentUserID, required this.searchText});
+  const BlacklistList({super.key, required this.currentUserID, required this.searchText});
 
   Future<String?> _getProfileImageUrl(String phoneNo, String? registeredSMSUserID) async {
     final contactQuerySnapshot = await FirebaseFirestore.instance
@@ -62,46 +62,46 @@ class WhitelistList extends StatelessWidget {
       ),
       child: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('whitelist')
+            .collection('blacklist')
             .where('smsUserID', isEqualTo: currentUserID)
             .orderBy('name') // Add sorting by 'name' here
             .snapshots(),
-        builder: (context, whitelistSnapshot) {
-          if (whitelistSnapshot.connectionState == ConnectionState.waiting) {
+        builder: (context, blacklistSnapshot) {
+          if (blacklistSnapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (!whitelistSnapshot.hasData || whitelistSnapshot.data!.docs.isEmpty) {
-            return const Center(child: Text("No whitelist contacts available"));
+          if (!blacklistSnapshot.hasData || blacklistSnapshot.data!.docs.isEmpty) {
+            return const Center(child: Text("No blacklisted contacts available"));
           }
 
-          var whitelistContacts = whitelistSnapshot.data!.docs;
+          var blacklistContacts = blacklistSnapshot.data!.docs;
 
           
           // Filter contacts by search text (name or phone number)
-          whitelistContacts = whitelistContacts.where((doc) {
+          blacklistContacts = blacklistContacts.where((doc) {
             final name = doc['name']?.toString().toLowerCase() ?? '';
             final phoneNo = doc['phoneNo']?.toString().toLowerCase() ?? '';
             return name.contains(searchText) || phoneNo.contains(searchText);
           }).toList();
-          
+
           return Scrollbar(
             thumbVisibility: true,
             thickness: 8.0,
             radius: const Radius.circular(8),
             child: ListView.builder(
-              itemCount: whitelistContacts.length,
+              itemCount: blacklistContacts.length,
               itemBuilder: (context, index) {
-                var whitelistEntry = whitelistContacts[index];
-                var contactName = whitelistEntry['name'] ?? '';
-                var phoneNo = whitelistEntry['phoneNo'];
-                var registeredSMSUserID = whitelistEntry['smsUserID'];
+                var blacklistEntry = blacklistContacts[index];
+                var contactName = blacklistEntry['name'] ?? '';
+                var phoneNo = blacklistEntry['phoneNo'];
+                var registeredSMSUserID = blacklistEntry['smsUserID'];
 
                 return FutureBuilder<String?>(
                   future: _getProfileImageUrl(phoneNo, registeredSMSUserID),
                   builder: (context, profileImageSnapshot) {
                     final profileImageUrl = profileImageSnapshot.data;
-                    
+
                     // Check if contactName is numeric. If so, display only the phone number as the name
                     final isNumericName = int.tryParse(contactName) != null;
                     final displayName = isNumericName ? phoneNo : contactName;
@@ -115,16 +115,16 @@ class WhitelistList extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 15),
                       child: GestureDetector(
                         onTap: () {
-                          // Navigate to ContactDetailsPage with the contactId
+                          // Navigate to BlacklistDetailsPage with the blacklistId
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => WhitelistDetailsPage(whitelistId: whitelistEntry.id),
+                              builder: (context) => BlacklistDetailsPage(blacklistId: blacklistEntry.id),
                             ),
                           );
                         },
                         onLongPress: () {
-                          _showContactOptions(context, displayName, whitelistEntry.id);
+                          _showContactOptions(context, displayName, blacklistEntry.id);
                         },
                         child: SizedBox(
                           height: 65,
@@ -216,14 +216,14 @@ class WhitelistList extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => WhitelistDetailsPage(whitelistId: contactId),
+                      builder: (context) => BlacklistDetailsPage(blacklistId: contactId),
                     ),
                   );
                 },
               ),
               ListTile(
                 title: const Text(
-                  'Remove from Whitelist',
+                  'Remove from Blacklist',
                   style: TextStyle(color: Colors.red),
                 ),
                 onTap: () {
@@ -238,8 +238,6 @@ class WhitelistList extends StatelessWidget {
     );
   }
 
-
-  
   Future<void> _deleteContact(BuildContext parentContext, String contactId) async {
     try {
       // Ask for confirmation
@@ -248,7 +246,7 @@ class WhitelistList extends StatelessWidget {
         builder: (BuildContext dialogContext) {
           return AlertDialog(
             title: const Text('Confirmation'),
-            content: const Text('Are you sure you want to remove this contact from the whitelist?'),
+            content: const Text('Are you sure you want to remove this contact from the blacklist?'),
             actions: [
               TextButton(
                 onPressed: () {
@@ -268,8 +266,39 @@ class WhitelistList extends StatelessWidget {
       );
 
       if (confirm == true) {
-        // Delete from Firestore
-        await FirebaseFirestore.instance.collection('whitelist').doc(contactId).delete();
+        final firestore = FirebaseFirestore.instance;
+
+        // Fetch the blacklist document
+        final blacklistDoc = await firestore.collection('blacklist').doc(contactId).get();
+        if (!blacklistDoc.exists) {
+          throw "Blacklist document not found.";
+        }
+
+        final blacklistData = blacklistDoc.data();
+        final phoneNo = blacklistData?['phoneNo'];
+        final smsUserID = blacklistData?['smsUserID'];
+
+        if (phoneNo == null || smsUserID == null) {
+          throw "Invalid data in the blacklist document.";
+        }
+
+        // Delete the blacklist document
+        await firestore.collection('blacklist').doc(contactId).delete();
+
+        // Update `isBlacklisted` in the contact collection
+        final contactQuery = await firestore
+            .collection('contact')
+            .where('phoneNo', isEqualTo: phoneNo)
+            .where('smsUserID', isEqualTo: smsUserID)
+            .get();
+
+        if (contactQuery.docs.isNotEmpty) {
+          for (var contactDoc in contactQuery.docs) {
+            await contactDoc.reference.update({
+              'isBlacklisted': false,
+            });
+          }
+        }
 
         // Show success dialog after deletion
         if (parentContext.mounted) {
@@ -278,7 +307,7 @@ class WhitelistList extends StatelessWidget {
             builder: (BuildContext dialogContext) {
               return AlertDialog(
                 title: const Text('Success'),
-                content: const Text('Contact removed from whitelist successfully.'),
+                content: const Text('Contact removed from blacklist successfully.'),
                 actions: [
                   TextButton(
                     onPressed: () {
@@ -315,7 +344,4 @@ class WhitelistList extends StatelessWidget {
       }
     }
   }
-
-
-
 }

@@ -5,8 +5,9 @@ import 'package:smsecure/Pages/Contact/ContactDetail.dart';
 
 class ContactList extends StatelessWidget {
   final String currentUserID;
+  final String searchText;
 
-  const ContactList({super.key, required this.currentUserID});
+  const ContactList({super.key, required this.currentUserID, required this.searchText});
 
   Future<String?> _getProfileImageUrl(String contactId, String? registeredSMSUserID) async {
     final contactDoc = await FirebaseFirestore.instance.collection('contact').doc(contactId).get();
@@ -33,49 +34,129 @@ class ContactList extends StatelessWidget {
     }
     return null;
   }
+  
+Future<void> _addToWhitelist(BuildContext context, String contactId) async {
+  final firestore = FirebaseFirestore.instance;
 
-  Future<void> _addToWhitelist(BuildContext context, String contactId) async {
-    final firestore = FirebaseFirestore.instance;
+  try {
+    print("Start of _addToWhitelist");
 
-    try {
-      // Fetch the contact details
-      final contactDoc = await firestore.collection('contact').doc(contactId).get();
-      if (contactDoc.exists) {
-        final contactData = contactDoc.data();
-        final name = contactData?['name'];
-        final phoneNo = contactData?['phoneNo'];
-        final smsUserID = contactData?['smsUserID'];
+    // Fetch contact details
+    final contactDoc = await firestore.collection('contact').doc(contactId).get();
+    if (!contactDoc.exists) {
+      _showMessageDialog(context, "Error", "Contact not found.");
+      return;
+    }
 
-        if (name != null && phoneNo != null && smsUserID != null) {
-          // Add to whitelist collection
-          await firestore.collection('whitelist').add({
-            'name': name,
-            'phoneNo': phoneNo,
-            'smsUserID': smsUserID,
-          });
-          _showMessageDialog(context, "Success", "Contact added to whitelist successfully.");
-        } else {
-          _showMessageDialog(context, "Error", "Failed to retrieve contact details.");
-        }
-      } else {
-        _showMessageDialog(context, "Error", "Contact not found.");
-      }
-    } catch (e) {
+    final contactData = contactDoc.data();
+    print("Contact details fetched: $contactData");
+
+    final name = contactData?['name'];
+    final phoneNo = contactData?['phoneNo'];
+    final smsUserID = contactData?['smsUserID'];
+
+    if (name == null || phoneNo == null || smsUserID == null) {
+      _showMessageDialog(context, "Error", "Failed to retrieve contact details.");
+      return;
+    }
+
+    // Check if contact is already in whitelist
+    final existingWhitelist = await firestore
+        .collection('whitelist')
+        .where('smsUserID', isEqualTo: smsUserID)
+        .where('phoneNo', isEqualTo: phoneNo)
+        .get();
+
+    print("Whitelist query results: ${existingWhitelist.docs.map((doc) => doc.data())}");
+    if (existingWhitelist.docs.isNotEmpty) {
+      print("Contact already exists in whitelist. Showing error dialog.");
+      _showMessageDialog(context, "Error", "This contact is already in the whitelist.");
+      return;
+    }
+
+    // Confirm addition
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Confirmation'),
+          content: Text('Are you sure you want to add "$name" to the whitelist?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+
+    print("Confirm dialog result: $confirm");
+    if (confirm != true) return;
+
+    // Add to whitelist
+    await firestore.collection('whitelist').add({
+      'name': name,
+      'phoneNo': phoneNo,
+      'smsUserID': smsUserID,
+    });
+
+    print("Contact successfully added to whitelist");
+
+    // Show success dialog
+    if (!context.mounted) {
+      print("Context is no longer mounted; cannot show success dialog.");
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Success'),
+          content: const Text('Contact added to whitelist successfully.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  } catch (e) {
+    print("Error in _addToWhitelist: $e");
+
+    // Show error message
+    if (context.mounted) {
       _showMessageDialog(context, "Error", "Error adding to whitelist: $e");
     }
   }
+}
 
-  void _showMessageDialog(BuildContext context, String title, String message) {
+
+
+
+void _showMessageDialog(BuildContext context, String title, String message) {
+  if (!context.mounted) {
+    print("Context is not mounted; cannot show dialog.");
+    return;
+  }
+  Future.microtask(() {
     showDialog(
-      context: Navigator.of(context, rootNavigator: true).context,
-      builder: (BuildContext context) {
+      context: context,
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: Text(title),
           content: Text(message),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop();
+                Navigator.of(dialogContext).pop();
               },
               child: const Text("OK"),
             ),
@@ -83,7 +164,13 @@ class ContactList extends StatelessWidget {
         );
       },
     );
-  }
+  });
+}
+
+
+
+
+
 
 
 
@@ -111,6 +198,7 @@ class ContactList extends StatelessWidget {
         stream: FirebaseFirestore.instance
             .collection('contact')
             .where('smsUserID', isEqualTo: currentUserID)
+            .where('isBlacklisted', isEqualTo: false)
             .orderBy('name')
             .snapshots(),
         builder: (context, snapshot) {
@@ -123,6 +211,13 @@ class ContactList extends StatelessWidget {
           }
 
           var contacts = snapshot.data!.docs;
+
+          // Filter contacts based on searchText (name or phone number)
+          contacts = contacts.where((doc) {
+            final name = doc['name']?.toString().toLowerCase() ?? '';
+            final phoneNo = doc['phoneNo']?.toString().toLowerCase() ?? '';
+            return name.contains(searchText) || phoneNo.contains(searchText);
+          }).toList();
 
           return Scrollbar(
             thumbVisibility: true,
@@ -143,6 +238,15 @@ class ContactList extends StatelessWidget {
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 15),
                   child: GestureDetector(
+                    onTap: () {
+                      // Navigate to ContactDetailsPage with the contactId
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ContactDetailsPage(contactId: contact.id),
+                        ),
+                      );
+                    },
                     onLongPress: () {
                       _showContactOptions(context, displayName, contact.id);
                     },
@@ -214,9 +318,9 @@ class ContactList extends StatelessWidget {
     );
   }
 
-  void _showContactOptions(BuildContext context, String contactName, String contactId) {
+  void _showContactOptions(BuildContext parentContext, String contactName, String contactId) {
     showModalBottomSheet(
-      context: context,
+      context: parentContext,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
       ),
@@ -239,9 +343,9 @@ class ContactList extends StatelessWidget {
               ListTile(
                 title: const Text('View Details'),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(context); // Dismiss modal first
                   Navigator.push(
-                    context,
+                    parentContext,
                     MaterialPageRoute(
                       builder: (context) => ContactDetailsPage(contactId: contactId),
                     ),
@@ -251,8 +355,10 @@ class ContactList extends StatelessWidget {
               ListTile(
                 title: const Text('Add to Whitelist'),
                 onTap: () {
-                  Navigator.pop(context);
-                  _addToWhitelist(context, contactId); // Pass the valid context from the parent widget
+                  // Call whitelist addition before closing the modal
+                  _addToWhitelist(parentContext, contactId).then((_) {
+                    Navigator.pop(context); // Dismiss modal after operation
+                  });
                 },
               ),
               ListTile(
@@ -261,7 +367,8 @@ class ContactList extends StatelessWidget {
                   style: TextStyle(color: Colors.red),
                 ),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(context); // Close the modal
+                  _addToBlacklist(parentContext, contactId); // Add to blacklist logic
                 },
               ),
               ListTile(
@@ -270,8 +377,8 @@ class ContactList extends StatelessWidget {
                   style: TextStyle(color: Colors.red),
                 ),
                 onTap: () {
-                  Navigator.pop(context);
-                  _deleteContact(contactId);
+                  Navigator.pop(context); // Close the modal
+                  _deleteContact(parentContext, contactId); // Use refactored delete logic
                 },
               ),
             ],
@@ -281,7 +388,163 @@ class ContactList extends StatelessWidget {
     );
   }
 
-  void _deleteContact(String contactId) {
-    FirebaseFirestore.instance.collection('contact').doc(contactId).delete();
+  Future<void> _addToBlacklist(BuildContext context, String contactId) async {
+    final firestore = FirebaseFirestore.instance;
+
+    try {
+      // Fetch contact details
+      final contactDoc = await firestore.collection('contact').doc(contactId).get();
+      if (!contactDoc.exists) {
+        _showMessageDialog(context, "Error", "Contact not found.");
+        return;
+      }
+
+      final contactData = contactDoc.data();
+      final name = contactData?['name'];
+      final phoneNo = contactData?['phoneNo'];
+      final smsUserID = contactData?['smsUserID'];
+
+      if (name == null || phoneNo == null || smsUserID == null) {
+        _showMessageDialog(context, "Error", "Failed to retrieve contact details.");
+        return;
+      }
+
+      // Check if contact is already in the blacklist
+      final existingBlacklist = await firestore
+          .collection('blacklist')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .where('phoneNo', isEqualTo: phoneNo)
+          .get();
+
+      if (existingBlacklist.docs.isNotEmpty) {
+        _showMessageDialog(context, "Error", "This contact is already in the blacklist.");
+        return;
+      }
+
+      // Show confirmation dialog
+      final bool? confirm = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext dialogContext) {
+          return AlertDialog(
+            title: const Text('Confirmation'),
+            content: Text('Are you sure you want to blacklist "$name"?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Blacklist'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirm != true) return;
+
+      // Add to blacklist
+      await firestore.collection('blacklist').add({
+        'name': name,
+        'phoneNo': phoneNo,
+        'smsUserID': smsUserID,
+      });
+
+      // Update isBlacklisted field in the contact collection
+      await firestore.collection('contact').doc(contactId).update({
+        'isBlacklisted': true,
+      });
+
+      // Check and remove from whitelist if the contact exists
+      final existingWhitelist = await firestore
+          .collection('whitelist')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .where('phoneNo', isEqualTo: phoneNo)
+          .get();
+
+      if (existingWhitelist.docs.isNotEmpty) {
+        for (var doc in existingWhitelist.docs) {
+          await firestore.collection('whitelist').doc(doc.id).delete();
+        }
+      }
+
+      // Show success dialog
+      if (context.mounted) {
+        _showMessageDialog(context, "Success", "Contact successfully added to the blacklist.");
+      }
+    } catch (e) {
+      if (context.mounted) {
+        _showMessageDialog(context, "Error", "Error adding to blacklist: $e");
+      }
+    }
   }
+
+
+
+  Future<void> _deleteContact(BuildContext context, String contactId) async {
+    final firestore = FirebaseFirestore.instance;
+
+    try {
+      print("Start of _deleteContact");
+
+      // Confirm deletion
+      final bool? confirm = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext dialogContext) {
+          return AlertDialog(
+            title: const Text('Confirmation'),
+            content: const Text('Are you sure you want to delete this contact?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          );
+        },
+      );
+
+      print("Confirm dialog result: $confirm");
+      if (confirm != true) return;
+
+      // Delete contact
+      await firestore.collection('contact').doc(contactId).delete();
+      print("Contact successfully deleted");
+
+      // Show success dialog
+      if (!context.mounted) {
+        print("Context is no longer mounted; cannot show success dialog.");
+        return;
+      }
+
+      await showDialog(
+        context: context,
+        builder: (BuildContext dialogContext) {
+          return AlertDialog(
+            title: const Text('Success'),
+            content: const Text('Contact deleted successfully.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      print("Error in _deleteContact: $e");
+
+      // Show error message
+      if (context.mounted) {
+        _showMessageDialog(context, "Error", "Error deleting contact: $e");
+      }
+    }
+  }
+
 }

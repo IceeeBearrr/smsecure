@@ -198,6 +198,8 @@ class _AddContactPageState extends State<AddContactPage> {
     }
   }
 
+
+
   Future<void> _saveContactDetails() async {
     if (_formKey.currentState!.validate()) {
       final String? smsUserID = await getSmsUserID();
@@ -206,16 +208,41 @@ class _AddContactPageState extends State<AddContactPage> {
         print("Error: Could not retrieve smsUserID.");
         return;
       }
-      
+
       if (_profileImageBase64 != null && _profileImageBase64!.length > 1048487) {
         _showFileSizeError();
         return; // Exit if profile image is too large
       }
 
       final firestore = FirebaseFirestore.instance;
-      String? registeredSMSUserID;
+      final String contactName = _nameController.text.trim();
+      final String contactPhoneNumber = _phoneController.text.trim();
 
-      final String contactPhoneNumber = _phoneController.text;
+      // Check if the contact already exists by phone number or name
+      final existingContactQuery = await firestore
+          .collection('contact')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .where('phoneNo', isEqualTo: contactPhoneNumber)
+          .get();
+
+      final existingNameQuery = await firestore
+          .collection('contact')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .where('name', isEqualTo: contactName)
+          .get();
+
+      if (existingContactQuery.docs.isNotEmpty || existingNameQuery.docs.isNotEmpty) {
+        // Show error message if the contact already exists
+        _showMessageDialog(
+          context,
+          "Error",
+          "A contact with this phone number or name already exists.",
+        );
+        return;
+      }
+
+      // If the contact does not exist, proceed to add
+      String? registeredSMSUserID;
       final QuerySnapshot querySnapshot = await firestore
           .collection('smsUser')
           .where('phoneNo', isEqualTo: contactPhoneNumber)
@@ -231,7 +258,7 @@ class _AddContactPageState extends State<AddContactPage> {
       await firestore.collection('contact').add({
         'isBlacklisted': false,
         'isSpam': false,
-        'name': _nameController.text,
+        'name': contactName,
         'phoneNo': contactPhoneNumber,
         'note': _noteController.text.isEmpty ? 'No note' : _noteController.text,
         'smsUserID': smsUserID,
@@ -244,11 +271,12 @@ class _AddContactPageState extends State<AddContactPage> {
         String documentID = firestore.collection('whitelist').doc().id;
         await firestore.collection('whitelist').doc(documentID).set({
           'smsUserID': smsUserID,
-          'name': _nameController.text,
+          'name': contactName,
           'phoneNo': contactPhoneNumber,
         });
       }
 
+      // Show success dialog
       showDialog(
         context: context,
         builder: (BuildContext context) {
@@ -269,6 +297,28 @@ class _AddContactPageState extends State<AddContactPage> {
       );
     }
   }
+
+
+  void _showMessageDialog(BuildContext context, String title, String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
 
   // Function to build the whitelist field with Yes/No options
   Widget _buildWhitelistField(BuildContext context) {

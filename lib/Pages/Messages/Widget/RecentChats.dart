@@ -7,8 +7,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class Recentchats extends StatefulWidget {
   final String currentUserID;
+  final String searchText; // Accept search input
 
-  const Recentchats({super.key, required this.currentUserID});
+  const Recentchats({super.key, required this.currentUserID, required this.searchText});
 
   @override
   _RecentchatsState createState() => _RecentchatsState();
@@ -162,6 +163,18 @@ class _RecentchatsState extends State<Recentchats> {
           }
 
           var conversations = snapshot.data!.docs;
+
+          // Filter conversations based on search text
+          conversations = conversations.where((conversation) {
+            var participants = List<String>.from(conversation['participants'] ?? []);
+            var otherUserPhone = participants.firstWhere((id) => id != widget.currentUserID, orElse: () => '');
+            final contactDetails = contactCache[otherUserPhone] ?? {'name': otherUserPhone};
+
+            final name = contactDetails['name']?.toString().toLowerCase() ?? '';
+            final phoneNo = otherUserPhone.toLowerCase();
+
+            return name.contains(widget.searchText) || phoneNo.contains(widget.searchText);
+          }).toList();
 
           return Column(
             children: [

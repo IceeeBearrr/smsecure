@@ -197,21 +197,74 @@ class _EditContactPageState extends State<EditContactPage> {
   Future<void> _saveContactDetails() async {
     if (_formKey.currentState!.validate()) {
       final firestore = FirebaseFirestore.instance;
-      await firestore.collection('contact').doc(widget.contactId).update({
-        'name': _nameController.text,
-        'phoneNo': _phoneController.text,
-        'note': _noteController.text.isEmpty ? 'No note' : _noteController.text,
-        if (_profileImageBase64 != null) 'profileImageUrl': _profileImageBase64,
-      });
+      final contactName = _nameController.text.trim();
+      final contactPhoneNumber = _phoneController.text.trim();
 
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            title: const Text('Success'),
-            content: const Text('Contact updated successfully.'),
-            actions: [
-              TextButton(
+      // Get the current contact details
+      final currentContactSnapshot = await firestore.collection('contact').doc(widget.contactId).get();
+      if (!currentContactSnapshot.exists) {
+        _showMessageDialog(context, "Error", "Contact does not exist.");
+        return;
+      }
+
+      final currentContactData = currentContactSnapshot.data()!;
+      final currentName = currentContactData['name'] ?? '';
+      final currentPhone = currentContactData['phoneNo'] ?? '';
+
+      // Skip duplicate checks if the name and phone number are the same as the current values
+      if (contactName == currentName && contactPhoneNumber == currentPhone) {
+        await _updateContactDetails();
+        return;
+      }
+
+      // Check if the name or phone number already exists in other contacts
+      final existingPhoneQuery = await firestore
+          .collection('contact')
+          .where('phoneNo', isEqualTo: contactPhoneNumber)
+          .get();
+
+      final existingNameQuery = await firestore
+          .collection('contact')
+          .where('name', isEqualTo: contactName)
+          .get();
+
+      final isDuplicatePhone = existingPhoneQuery.docs.any((doc) => doc.id != widget.contactId);
+      final isDuplicateName = existingNameQuery.docs.any((doc) => doc.id != widget.contactId);
+
+      if (isDuplicatePhone || isDuplicateName) {
+        // Show error message if duplicates are found
+        _showMessageDialog(
+          context,
+          "Error",
+          "A contact with this phone number or name already exists.",
+        );
+        return;
+      }
+
+      // If no duplicates, proceed to update the contact details
+      await _updateContactDetails();
+    }
+  }
+
+  Future<void> _updateContactDetails() async {
+    final firestore = FirebaseFirestore.instance;
+
+    await firestore.collection('contact').doc(widget.contactId).update({
+      'name': _nameController.text.trim(),
+      'phoneNo': _phoneController.text.trim(),
+      'note': _noteController.text.isEmpty ? 'No note' : _noteController.text.trim(),
+      if (_profileImageBase64 != null) 'profileImageUrl': _profileImageBase64,
+    });
+
+    // Show success dialog
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Success'),
+          content: const Text('Contact updated successfully.'),
+          actions: [
+            TextButton(
               onPressed: () {
                 Navigator.of(context).pop(); // Close the dialog
                 Navigator.of(context).pushAndRemoveUntil(
@@ -221,14 +274,34 @@ class _EditContactPageState extends State<EditContactPage> {
                   (Route<dynamic> route) => route.isFirst,
                 );
               },
-                child: const Text('OK'),
-              ),
-            ],
-          );
-        },
-      );
-    }
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
   }
+
+  void _showMessageDialog(BuildContext context, String title, String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog
+              },
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {

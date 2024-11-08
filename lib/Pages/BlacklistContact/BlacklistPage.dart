@@ -1,23 +1,22 @@
 import 'package:flutter/material.dart';
-import 'ContactList.dart';
+import 'BlacklistList.dart'; // Assuming this new widget will load the blacklist contacts
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:smsecure/Pages/Contact/AddContact.dart';
 
 // Initialize Flutter Secure Storage instance
 const FlutterSecureStorage secureStorage = FlutterSecureStorage();
 
-class ContactPage extends StatefulWidget {
-  const ContactPage({super.key});
+class BlacklistPage extends StatefulWidget {
+  const BlacklistPage({super.key});
 
   @override
-  State<ContactPage> createState() => _ContactPageState();
+  State<BlacklistPage> createState() => _BlacklistPageState();
 }
 
-class _ContactPageState extends State<ContactPage> {
+class _BlacklistPageState extends State<BlacklistPage> {
   String? userPhone;
   String? currentSmsUserID;
-  String searchText = ""; // Store the current search text
+  String searchText = ""; // State to store search input
 
   @override
   void initState() {
@@ -27,7 +26,7 @@ class _ContactPageState extends State<ContactPage> {
 
   Future<void> _loadUserPhone() async {
     userPhone = await secureStorage.read(key: 'userPhone');
-    setState(() {}); // Trigger a rebuild to update the UI with the userPhone if needed
+    setState(() {});
 
     if (userPhone != null) {
       await _findSmsUserID();
@@ -45,39 +44,36 @@ class _ContactPageState extends State<ContactPage> {
 
     if (findSmsUserIDSnapshot.docs.isNotEmpty) {
       currentSmsUserID = findSmsUserIDSnapshot.docs.first.id;
-      setState(() {}); // Trigger a rebuild to update the UI with the currentSmsUserID
-    }
-  }
-
-  Future<void> _navigateToAddContact() async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const AddContactPage()),
-    );
-
-    if (result == true) {
-      _loadUserPhone();
+      setState(() {});
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          "Blacklisted Contacts",
+          style: TextStyle(
+            color: Color(0xFF113953),
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF113953)),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+      ),
       body: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 25, right: 260, bottom: 25),
-            child: Text(
-              "Contacts",
-              style: TextStyle(
-                color: Color(0xFF113953),
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
+          const SizedBox(height: 20),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15),
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
             child: Row(
               children: [
                 Expanded(
@@ -121,22 +117,16 @@ class _ContactPageState extends State<ContactPage> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                GestureDetector(
-                  onTap: _navigateToAddContact,
-                  child: const Icon(
-                    Icons.add_circle_outline,
-                    color: Color(0xFF113953),
-                    size: 28,
-                  ),
-                ),
               ],
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 20),
           Expanded(
             child: (userPhone != null && currentSmsUserID != null)
-                ? ContactList(currentUserID: currentSmsUserID!, searchText: searchText)
+                ? BlacklistList(
+                    currentUserID: currentSmsUserID!,
+                    searchText: searchText, // Pass search text
+                  )
                 : const Center(child: CircularProgressIndicator()),
           ),
         ],

@@ -15,6 +15,7 @@ class Messages extends StatefulWidget {
 
 class _MessagesState extends State<Messages> {
   String? userPhone;
+  String searchText = ""; // State for search input
 
   @override
   void initState() {
@@ -24,7 +25,7 @@ class _MessagesState extends State<Messages> {
 
   Future<void> _loadUserPhone() async {
     userPhone = await secureStorage.read(key: 'userPhone');
-    setState(() {}); // Trigger a rebuild to update the UI with the userPhone if needed
+    setState(() {});
   }
 
   @override
@@ -60,30 +61,38 @@ class _MessagesState extends State<Messages> {
                 ],
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  SizedBox(
-                    width: 300,
+                  const Icon(
+                    Icons.search,
+                    color: Color(0xFF113953),
+                  ),
+                  Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 15),
                       child: TextFormField(
                         decoration: const InputDecoration(
-                          hintText: "Search",
+                          hintText: "Search by name or phone number",
                           border: InputBorder.none,
                         ),
+                        onChanged: (value) {
+                          setState(() {
+                            searchText = value.trim().toLowerCase(); // Update search input
+                          });
+                        },
                       ),
                     ),
-                  ),
-                  const Icon(
-                    Icons.search,
-                    color: Color(0xFF113953),
                   ),
                 ],
               ),
             ),
           ),
           Expanded(
-            child: userPhone != null ? Recentchats(currentUserID: userPhone!) : const Center(child: CircularProgressIndicator()),
+            child: userPhone != null
+                ? Recentchats(
+                    currentUserID: userPhone!,
+                    searchText: searchText, // Pass search text
+                  )
+                : const Center(child: CircularProgressIndicator()),
           ),
         ],
       ),

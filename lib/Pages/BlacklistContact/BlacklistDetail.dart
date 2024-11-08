@@ -1,24 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
-import 'package:smsecure/Pages/Chat/ChatPage.dart';
-import 'package:smsecure/Pages/WhitelistContact/EditWhitelistContact.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-class WhitelistDetailsPage extends StatelessWidget {
-  final String whitelistId;
+class BlacklistDetailsPage extends StatelessWidget {
+  final String blacklistId;
   final storage = FlutterSecureStorage();
 
-  WhitelistDetailsPage({Key? key, required this.whitelistId}) : super(key: key);
+  BlacklistDetailsPage({Key? key, required this.blacklistId}) : super(key: key);
 
-  Future<Map<String, dynamic>> _fetchWhitelistDetails() async {
+  Future<Map<String, dynamic>> _fetchBlacklistDetails() async {
     final firestore = FirebaseFirestore.instance;
-    final whitelistSnapshot = await firestore.collection('whitelist').doc(whitelistId).get();
+    final blacklistSnapshot = await firestore.collection('blacklist').doc(blacklistId).get();
     
-    if (whitelistSnapshot.exists) {
-      final whitelistData = whitelistSnapshot.data()!;
-      final phoneNo = whitelistData['phoneNo'];
-      final name = whitelistData['name'] ?? phoneNo;
+    if (blacklistSnapshot.exists) {
+      final blacklistData = blacklistSnapshot.data()!;
+      final phoneNo = blacklistData['phoneNo'];
+      final name = blacklistData['name'] ?? phoneNo;
       String? profileImageUrl;
 
       // Attempt to retrieve profile image from contact collection
@@ -58,50 +56,12 @@ class WhitelistDetailsPage extends StatelessWidget {
     }
   }
 
-  Future<void> _sendMessage(BuildContext context, String receiverPhone) async {
-    final firestore = FirebaseFirestore.instance;
-    final userPhone = await storage.read(key: "userPhone");
-
-    if (userPhone == null) {
-      print("User phone not found in secure storage.");
-      return;
-    }
-
-    QuerySnapshot conversationSnapshot = await firestore
-        .collection('conversations')
-        .where('participants', arrayContainsAny: [userPhone])
-        .get();
-
-    String? conversationID;
-    for (var doc in conversationSnapshot.docs) {
-      List<dynamic> participants = doc['participants'];
-      if (participants.contains(receiverPhone) && participants.contains(userPhone)) {
-        conversationID = doc.id;
-        break;
-      }
-    }
-
-    if (conversationID == null) {
-      DocumentReference newConversation = await firestore.collection('conversations').add({
-        'participants': [userPhone, receiverPhone],
-      });
-      conversationID = newConversation.id;
-    }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => Chatpage(conversationID: conversationID!),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Whitelist Contact',
+          'Blacklist Contact',
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.bold,
@@ -117,16 +77,16 @@ class WhitelistDetailsPage extends StatelessWidget {
         elevation: 0,
       ),
       body: FutureBuilder<Map<String, dynamic>>(
-        future: _fetchWhitelistDetails(),
+        future: _fetchBlacklistDetails(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return const Center(child: Text("Error fetching whitelist details"));
+            return const Center(child: Text("Error fetching blacklist details"));
           }
           if (!snapshot.hasData) {
-            return const Center(child: Text("No whitelist details available"));
+            return const Center(child: Text("No blacklist details available"));
           }
 
           final data = snapshot.data!;
@@ -211,20 +171,12 @@ class WhitelistDetailsPage extends StatelessWidget {
                     ),
                     child: Column(
                       children: [
-                        _buildProfileOption(Icons.edit, 'Edit Contact', onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => EditWhitelistPage(whitelistId: whitelistId),
-                            ),
-                          );
-                        }),
                         _buildProfileOption(
                           Icons.delete,
-                          'Remove from Whitelist',
+                          'Remove from Blacklist',
                           color: Colors.red,
                           onTap: () {
-                            _removeFromWhitelist(context);
+                            _removeFromBlacklist(context);
                           },
                         ),
                       ],
@@ -239,7 +191,7 @@ class WhitelistDetailsPage extends StatelessWidget {
     );
   }
 
-  Future<void> _removeFromWhitelist(BuildContext context) async {
+  Future<void> _removeFromBlacklist(BuildContext context) async {
     final firestore = FirebaseFirestore.instance;
 
     // Show confirmation dialog
@@ -248,7 +200,7 @@ class WhitelistDetailsPage extends StatelessWidget {
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Confirmation'),
-          content: const Text('Are you sure you want to remove this contact from the whitelist?'),
+          content: const Text('Are you sure you want to remove this contact from the blacklist?'),
           actions: [
             TextButton(
               onPressed: () {
@@ -270,51 +222,83 @@ class WhitelistDetailsPage extends StatelessWidget {
     // If user confirms, proceed with removal
     if (confirm == true) {
       try {
-        // Delete the whitelist entry by document ID
-        await firestore.collection('whitelist').doc(whitelistId).delete();
+        // Fetch the blacklist entry
+        final blacklistDoc = await firestore.collection('blacklist').doc(blacklistId).get();
+        if (!blacklistDoc.exists) {
+          throw "Blacklist entry not found.";
+        }
+
+        final blacklistData = blacklistDoc.data();
+        final phoneNo = blacklistData?['phoneNo'];
+        final smsUserID = blacklistData?['smsUserID'];
+
+        if (phoneNo == null || smsUserID == null) {
+          throw "Invalid data in blacklist entry.";
+        }
+
+        // Delete the blacklist entry by document ID
+        await firestore.collection('blacklist').doc(blacklistId).delete();
+
+        // Update `isBlacklisted` field in the contact collection
+        final contactQuery = await firestore
+            .collection('contact')
+            .where('phoneNo', isEqualTo: phoneNo)
+            .where('smsUserID', isEqualTo: smsUserID)
+            .get();
+
+        if (contactQuery.docs.isNotEmpty) {
+          for (var contactDoc in contactQuery.docs) {
+            await contactDoc.reference.update({
+              'isBlacklisted': false,
+            });
+          }
+        }
 
         // Show success dialog
-        showDialog(
-          context: context,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: const Text('Success'),
-              content: const Text('Contact removed from whitelist successfully.'),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(); // Close the dialog
-                    Navigator.of(context).pop(true); // Return to the previous screen
-                  },
-                  child: const Text('OK'),
-                ),
-              ],
-            );
-          },
-        );
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            builder: (BuildContext dialogContext) {
+              return AlertDialog(
+                title: const Text('Success'),
+                content: const Text('Contact removed from blacklist successfully.'),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop(); // Close the dialog
+                      Navigator.of(context).pop(true); // Return to the previous screen
+                    },
+                    child: const Text('OK'),
+                  ),
+                ],
+              );
+            },
+          );
+        }
       } catch (e) {
         // Handle errors and show error dialog
-        showDialog(
-          context: context,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: const Text('Error'),
-              content: Text('An error occurred while removing from whitelist: $e'),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(); // Close the dialog
-                  },
-                  child: const Text('OK'),
-                ),
-              ],
-            );
-          },
-        );
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: const Text('Error'),
+                content: Text('An error occurred while removing from blacklist: $e'),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop(); // Close the dialog
+                    },
+                    child: const Text('OK'),
+                  ),
+                ],
+              );
+            },
+          );
+        }
       }
     }
   }
-
 
 
   Widget _buildProfileOption(IconData icon, String title, {Color? color, VoidCallback? onTap}) {

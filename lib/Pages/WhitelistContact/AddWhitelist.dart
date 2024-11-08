@@ -52,56 +52,99 @@ class _AddWhitelistPageState extends State<AddWhitelistPage> {
 
   Future<void> _saveWhitelistEntry() async {
     if (_formKey.currentState!.validate()) {
-      final String? smsUserID = await getSmsUserID();
-
-      if (smsUserID == null) {
-        print("Error: Could not retrieve smsUserID.");
-        return;
-      }
-
       final firestore = FirebaseFirestore.instance;
-      String? registeredSMSUserID;
+      final enteredName = _nameController.text.trim();
+      final enteredPhone = _phoneController.text.trim();
 
-      final String contactPhoneNumber = _phoneController.text;
-      final QuerySnapshot querySnapshot = await firestore
-          .collection('smsUser')
-          .where('phoneNo', isEqualTo: contactPhoneNumber)
-          .limit(1)
-          .get();
+      try {
+        // Check if the name or phone number already exists in the whitelist
+        final nameQuery = await firestore
+            .collection('whitelist')
+            .where('name', isEqualTo: enteredName)
+            .get();
 
-      if (querySnapshot.docs.isNotEmpty) {
-        registeredSMSUserID = querySnapshot.docs.first.id;
-      } else {
-        registeredSMSUserID = "";
-      }
+        final phoneQuery = await firestore
+            .collection('whitelist')
+            .where('phoneNo', isEqualTo: enteredPhone)
+            .get();
 
-      // Add to whitelist
-      await firestore.collection('whitelist').add({
-        'smsUserID': smsUserID,
-        'name': _nameController.text,
-        'phoneNo': contactPhoneNumber,
-      });
-
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            title: const Text('Success'),
-            content: const Text('Whitelist entry added successfully.'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop(true);
-                },
-                child: const Text('OK'),
-              ),
-            ],
+        if (nameQuery.docs.isNotEmpty || phoneQuery.docs.isNotEmpty) {
+          // Show error dialog if duplicates are found
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: const Text('Error'),
+                content: const Text('A whitelist entry with this name or phone number already exists.'),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text('OK'),
+                  ),
+                ],
+              );
+            },
           );
-        },
-      );
+          return;
+        }
+
+        // Retrieve the smsUserID for the current user
+        final String? smsUserID = await getSmsUserID();
+        if (smsUserID == null) {
+          throw Exception('Could not retrieve smsUserID.');
+        }
+
+        // Add the new entry to the whitelist
+        await firestore.collection('whitelist').add({
+          'smsUserID': smsUserID,
+          'name': enteredName,
+          'phoneNo': enteredPhone,
+        });
+
+        // Show success dialog
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Success'),
+              content: const Text('Whitelist entry added successfully.'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(); // Close success dialog
+                    Navigator.of(context).pop(true); // Close AddWhitelistPage and return true
+                  },
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
+        );
+      } catch (e) {
+        // Handle any errors
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Error'),
+              content: Text('An error occurred: $e'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
+        );
+      }
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

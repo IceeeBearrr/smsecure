@@ -73,50 +73,101 @@ class _EditWhitelistPageState extends State<EditWhitelistPage> {
   Future<void> _saveWhitelistDetails() async {
     if (_formKey.currentState!.validate()) {
       final firestore = FirebaseFirestore.instance;
-      final phoneNo = _phoneController.text;
+      final newPhoneNo = _phoneController.text.trim();
+      final newName = _nameController.text.trim();
 
-      const FlutterSecureStorage secureStorage = FlutterSecureStorage();
-      userPhone = await secureStorage.read(key: 'userPhone');
+      try {
+        // Check for duplicates in the whitelist collection
+        final QuerySnapshot phoneQuery = await firestore
+            .collection('whitelist')
+            .where('phoneNo', isEqualTo: newPhoneNo)
+            .get();
 
-    final QuerySnapshot findSmsUserIDSnapshot = await firestore
-        .collection('smsUser')
-        .where('phoneNo', isEqualTo: userPhone)
-        .limit(1)
-        .get();
+        final QuerySnapshot nameQuery = await firestore
+            .collection('whitelist')
+            .where('name', isEqualTo: newName)
+            .get();
 
-    if (findSmsUserIDSnapshot.docs.isNotEmpty) {
-      currentSmsUserID = findSmsUserIDSnapshot.docs.first.id;
-      await firestore.collection('whitelist').doc(widget.whitelistId).update({
-        'name': _nameController.text,
-        'phoneNo': _phoneController.text,
-      });
-    }
+        final bool phoneExists = phoneQuery.docs.isNotEmpty && phoneQuery.docs.first.id != widget.whitelistId;
+        final bool nameExists = nameQuery.docs.isNotEmpty && nameQuery.docs.first.id != widget.whitelistId;
 
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            title: const Text('Success'),
-            content: const Text('Whitelist contact updated successfully.'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(
-                      builder: (context) => WhitelistDetailsPage(whitelistId: widget.whitelistId),
-                    ),
-                    (Route<dynamic> route) => route.isFirst,
-                  );
-                },
-                child: const Text('OK'),
-              ),
-            ],
+        if (phoneExists || nameExists) {
+          // Show error dialog if duplicates are found
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: const Text('Error'),
+                content: const Text(
+                    'A whitelist entry with this name or phone number already exists.'),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text('OK'),
+                  ),
+                ],
+              );
+            },
           );
-        },
-      );
+          return;
+        }
+
+        // Update the whitelist entry
+        await firestore.collection('whitelist').doc(widget.whitelistId).update({
+          'name': newName,
+          'phoneNo': newPhoneNo,
+        });
+
+        // Show success dialog
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Success'),
+              content: const Text('Whitelist contact updated successfully.'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            WhitelistDetailsPage(whitelistId: widget.whitelistId),
+                      ),
+                      (Route<dynamic> route) => route.isFirst,
+                    );
+                  },
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
+        );
+      } catch (e) {
+        // Handle errors
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Error'),
+              content: Text('An error occurred: $e'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
+        );
+      }
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
