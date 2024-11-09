@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SideNavigationBar extends StatefulWidget {
-  const SideNavigationBar({Key? key}) : super(key: key);
+  const SideNavigationBar({super.key});
 
   @override
   _SideNavigationBarState createState() => _SideNavigationBarState();
@@ -36,7 +36,7 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
           final userData = querySnapshot.docs.first.data();
           setState(() {
             userName = userData['name'] ?? 'No Name';
-            profileImageUrl = userData['profileImageUrl'] ?? null;
+            profileImageUrl = userData['profileImageUrl'];
           });
         }
       }

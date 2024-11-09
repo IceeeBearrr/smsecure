@@ -16,7 +16,7 @@ class Chatpage extends StatefulWidget {
 }
 
 class _ChatpageState extends State<Chatpage> {
-  final storage = FlutterSecureStorage();
+  final storage = const FlutterSecureStorage();
   String? participantName;
   String? profileImageBase64;
   bool isLoading = true;

@@ -16,7 +16,7 @@ class Recentchats extends StatefulWidget {
 }
 
 class _RecentchatsState extends State<Recentchats> {
-  final storage = FlutterSecureStorage();
+  final storage = const FlutterSecureStorage();
   String? currentUserSmsUserID;
   Map<String, Map<String, dynamic>> contactCache = {};
   bool isLoadingContacts = true;

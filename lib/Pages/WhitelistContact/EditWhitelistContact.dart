@@ -7,7 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class EditWhitelistPage extends StatefulWidget {
   final String whitelistId;
 
-  const EditWhitelistPage({Key? key, required this.whitelistId}) : super(key: key);
+  const EditWhitelistPage({super.key, required this.whitelistId});
 
   @override
   _EditWhitelistPageState createState() => _EditWhitelistPageState();
@@ -172,7 +172,7 @@ class _EditWhitelistPageState extends State<EditWhitelistPage> {
   @override
   Widget build(BuildContext context) {
     final profileImage = _profileImageBase64 != null && _profileImageBase64!.isNotEmpty
-        ? MemoryImage(base64Decode(_profileImageBase64!)!)
+        ? MemoryImage(base64Decode(_profileImageBase64!))
         : _profileImageBase64 != null
             ? MemoryImage(base64Decode(_profileImageBase64!))
             : null;

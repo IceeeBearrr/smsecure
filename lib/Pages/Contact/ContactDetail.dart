@@ -7,9 +7,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ContactDetailsPage extends StatelessWidget {
   final String contactId;
-  final storage = FlutterSecureStorage();
+  final storage = const FlutterSecureStorage();
 
-  ContactDetailsPage({Key? key, required this.contactId}) : super(key: key);
+  ContactDetailsPage({super.key, required this.contactId});
 
   Future<Map<String, dynamic>> _fetchContactDetails() async {
     final firestore = FirebaseFirestore.instance;
@@ -387,7 +387,7 @@ class ContactDetailsPage extends StatelessWidget {
                                   'Mobile',
                                   style: TextStyle(fontSize: 16),
                                 ),
-                                Spacer(),
+                                const Spacer(),
                                 Text(
                                   data['phoneNo'],
                                   style: const TextStyle(

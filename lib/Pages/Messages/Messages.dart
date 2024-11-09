@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:smsecure/Pages/Messages/Widget/RecentChats.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:smsecure/Pages/SideNavigationBar.dart';
 
 // Initialize Flutter Secure Storage instance
 const FlutterSecureStorage secureStorage = FlutterSecureStorage();

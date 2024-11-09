@@ -14,7 +14,7 @@ class Chat extends StatefulWidget {
 
 class _ChatState extends State<Chat> with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
-  final storage = FlutterSecureStorage();
+  final storage = const FlutterSecureStorage();
   String? userPhone;
 
   @override

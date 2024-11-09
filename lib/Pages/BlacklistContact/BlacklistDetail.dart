@@ -5,9 +5,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class BlacklistDetailsPage extends StatelessWidget {
   final String blacklistId;
-  final storage = FlutterSecureStorage();
+  final storage = const FlutterSecureStorage();
 
-  BlacklistDetailsPage({Key? key, required this.blacklistId}) : super(key: key);
+  BlacklistDetailsPage({super.key, required this.blacklistId});
 
   Future<Map<String, dynamic>> _fetchBlacklistDetails() async {
     final firestore = FirebaseFirestore.instance;
@@ -137,7 +137,7 @@ class BlacklistDetailsPage extends StatelessWidget {
                               'Mobile',
                               style: TextStyle(fontSize: 16),
                             ),
-                            Spacer(),
+                            const Spacer(),
                             Text(
                               data['phoneNo'],
                               style: const TextStyle(

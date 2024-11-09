@@ -10,7 +10,7 @@ import 'package:smsecure/Pages/Contact/ContactDetail.dart';
 class EditContactPage extends StatefulWidget {
   final String contactId;
 
-  const EditContactPage({Key? key, required this.contactId}) : super(key: key);
+  const EditContactPage({super.key, required this.contactId});
 
   @override
   _EditContactPageState createState() => _EditContactPageState();

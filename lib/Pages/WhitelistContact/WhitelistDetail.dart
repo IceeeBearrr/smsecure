@@ -7,9 +7,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class WhitelistDetailsPage extends StatelessWidget {
   final String whitelistId;
-  final storage = FlutterSecureStorage();
+  final storage = const FlutterSecureStorage();
 
-  WhitelistDetailsPage({Key? key, required this.whitelistId}) : super(key: key);
+  WhitelistDetailsPage({super.key, required this.whitelistId});
 
   Future<Map<String, dynamic>> _fetchWhitelistDetails() async {
     final firestore = FirebaseFirestore.instance;
@@ -177,7 +177,7 @@ class WhitelistDetailsPage extends StatelessWidget {
                               'Mobile',
                               style: TextStyle(fontSize: 16),
                             ),
-                            Spacer(),
+                            const Spacer(),
                             Text(
                               data['phoneNo'],
                               style: const TextStyle(

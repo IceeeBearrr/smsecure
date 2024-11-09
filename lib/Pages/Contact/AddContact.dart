@@ -8,7 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AddContactPage extends StatefulWidget {
-  const AddContactPage({Key? key}) : super(key: key);
+  const AddContactPage({super.key});
 
   @override
   _AddContactPageState createState() => _AddContactPageState();

@@ -255,7 +255,7 @@ void _showMessageDialog(BuildContext context, String title, String message) {
                       builder: (context, snapshot) {
                         final profileImage = snapshot.hasData && snapshot.data!.isNotEmpty
                             ? MemoryImage(base64Decode(snapshot.data!))
-                            : AssetImage("images/HomePage/defaultProfile.png") as ImageProvider;
+                            : const AssetImage("images/HomePage/defaultProfile.png") as ImageProvider;
 
                         return SizedBox(
                           height: 65,

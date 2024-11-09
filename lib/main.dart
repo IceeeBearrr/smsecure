@@ -80,7 +80,7 @@ class MainAppState extends State<MainApp> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
-      drawer: SideNavigationBar(), // Add the drawer here
+      drawer: const SideNavigationBar(), // Add the drawer here
       onDrawerChanged: (isOpen) {
         setState(() {
           _isDrawerOpen = isOpen;

@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AddWhitelistPage extends StatefulWidget {
-  const AddWhitelistPage({Key? key}) : super(key: key);
+  const AddWhitelistPage({super.key});
 
   @override
   _AddWhitelistPageState createState() => _AddWhitelistPageState();
