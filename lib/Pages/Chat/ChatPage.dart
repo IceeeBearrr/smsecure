@@ -21,11 +21,12 @@ class _ChatpageState extends State<Chatpage> {
   String? profileImageBase64;
   bool isLoading = true;
   String? userPhone; // Stores the current user's phone number
+  String currentUserName = "Unknown";
 
   @override
   void initState() {
     super.initState();
-    loadParticipantDetails();
+    initializeUserDetails();
   }
 
   Future<void> loadParticipantDetails() async {
@@ -92,10 +93,30 @@ class _ChatpageState extends State<Chatpage> {
     }
   }
 
+  Future<void> initializeUserDetails() async {
+    // Retrieve current user's phone number from secure storage
+    userPhone = await storage.read(key: "userPhone");
+    if (userPhone == null) return;
+
+    // Fetch the current user's name from the 'smsUser' collection
+    DocumentSnapshot userSnapshot = await FirebaseFirestore.instance
+        .collection('smsUser')
+        .doc(userPhone)
+        .get();
+
+    if (userSnapshot.exists) {
+      setState(() {
+        currentUserName = (userSnapshot.data() as Map<String, dynamic>)['name'] ?? "Unknown";
+      });
+    }
+
+    // Load participant details
+    await loadParticipantDetails();
+  }
+
+
   @override
   Widget build(BuildContext context) {
-    String currentUserName = "Janice";
-
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(70.0),

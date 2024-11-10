@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:smsecure/Pages/Profile/ProfileInformation.dart';
+import 'package:smsecure/Pages/QuarantineFolder/QuarantineFolderPage.dart';
 import 'package:smsecure/Pages/WhitelistContact/WhitelistPage.dart';
 import 'package:smsecure/Pages/BlacklistContact/BlacklistPage.dart';
 
@@ -171,7 +172,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const ProfileInformation(),
+                              builder: (context) => const QuarantineFolderPage(),
                             ),
                           ).then((_) {
                             _loadUserData(); // Reload data when returning

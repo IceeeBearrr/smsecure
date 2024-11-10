@@ -7,31 +7,243 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:http/http.dart' as http;
 
-Future<void> backgroundMessageHandler(SmsMessage message) async {
-    const FlutterSecureStorage secureStorage = const FlutterSecureStorage();
-    final firestore = FirebaseFirestore.instance;
+const MethodChannel smsChannel = MethodChannel("com.smsecure.app/sms");
 
-    // Retrieve sender and user phone numbers
-    String senderPhoneNumber = message.address ?? "";
-    String userPhone = await secureStorage.read(key: "userPhone") ?? "";
+class CustomSmsMessage {
+  final String senderNumber;
+  final String messageBody;
+  final int dateSent;
 
+  CustomSmsMessage({
+    required this.senderNumber,
+    required this.messageBody,
+    required this.dateSent,
+  });
+}
+
+
+void _initializeSmsListener() {
+  smsChannel.setMethodCallHandler((call) async {
+    if (call.method == "onSmsReceived") {
+      final Map<String, dynamic> smsData = Map<String, dynamic>.from(call.arguments);
+      String senderNumber = smsData["senderNumber"] ?? "Unknown";
+      String messageBody = smsData["messageBody"] ?? "No Content";
+      final dateSent = smsData["dateSent"] ?? DateTime.now().millisecondsSinceEpoch;
+
+      print("Received SMS in Flutter: $messageBody from $senderNumber");
+
+      // Create a `CustomSmsMessage` object
+      final CustomSmsMessage message = CustomSmsMessage(
+        senderNumber: senderNumber,
+        messageBody: messageBody,
+        dateSent: dateSent,
+      );
+
+      // Pass the data to your handler
+      await backgroundMessageHandler(message);
+    }
+  });
+}
+
+Future<void> handleIncomingSms(SmsMessage smsMessage) async {
+  final CustomSmsMessage customSmsMessage = CustomSmsMessage(
+    senderNumber: smsMessage.address ?? "",
+    messageBody: smsMessage.body ?? "",
+    dateSent: smsMessage.dateSent ?? DateTime.now().millisecondsSinceEpoch,
+  );
+
+  // Call your original backgroundMessageHandler
+  await backgroundMessageHandler(customSmsMessage);
+}
+
+
+Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
+  const FlutterSecureStorage secureStorage = FlutterSecureStorage();
+  final firestore = FirebaseFirestore.instance;
+
+  // Step 1: Retrieve userPhone
+  String userPhone = '';
+  try {
+    userPhone = await secureStorage.read(key: "userPhone") ?? "";
     if (userPhone.isEmpty) {
-        print("Error: userPhone is not set in secure storage.");
-        return; // Stop execution if userPhone is not available
+      print("Error: userPhone is not set in secure storage.");
+      return;
     }
+  } catch (e) {
+    print("Error reading userPhone from secure storage: $e");
+    return;
+  }
 
-    // Format phone numbers for consistency
-    if (!senderPhoneNumber.startsWith('+')) {
-        senderPhoneNumber = '+$senderPhoneNumber';
+  // Step 2: Retrieve smsUserID
+  String? smsUserID;
+  try {
+    smsUserID = await getSmsUserID(userPhone);
+    if (smsUserID == null) {
+      print("Error: smsUserID could not be retrieved for userPhone: $userPhone.");
+      return;
     }
-    if (!userPhone.startsWith('+')) {
-        userPhone = '+$userPhone';
+  } catch (e) {
+    print("Error fetching smsUserID: $e");
+    return;
+  }
+
+  // Step 3: Format phone numbers
+  String senderPhoneNumber = message.senderNumber;
+  if (!senderPhoneNumber.startsWith('+')) senderPhoneNumber = '+$senderPhoneNumber';
+  if (!userPhone.startsWith('+')) userPhone = '+$userPhone';
+
+  print("User Phone: $userPhone");
+  print("Sender Phone Number: $senderPhoneNumber");
+  print("smsUserID: $smsUserID");
+
+  // Step 4: Check if sender is whitelisted for the current smsUserID
+  final whitelistSnapshot = await firestore
+      .collection('whitelist')
+      .where('smsUserID', isEqualTo: smsUserID)
+      .where('phoneNo', isEqualTo: senderPhoneNumber)
+      .get();
+
+  bool isWhitelisted = whitelistSnapshot.docs.isNotEmpty;
+
+  if (isWhitelisted) {
+    print("Sender is whitelisted for smsUserID: $smsUserID. Skipping spam detection.");
+  } else {
+    // Step 5: Check if sender is blacklisted for the current smsUserID
+    final blacklistSnapshot = await firestore
+        .collection('blacklist')
+        .where('smsUserID', isEqualTo: smsUserID)
+        .where('phoneNo', isEqualTo: senderPhoneNumber)
+        .get();
+
+    bool isBlacklisted = blacklistSnapshot.docs.isNotEmpty;
+
+    if (isBlacklisted) {
+      print("Sender is blacklisted for smsUserID: $smsUserID. Skipping spam detection.");
+    } else {
+      // Perform spam detection for non-whitelisted and non-blacklisted users
+      final predictionRequest = {
+        'message': message.messageBody,
+        'senderPhone': senderPhoneNumber,
+      };
+
+      try {
+        final response = await http.post(
+          Uri.parse('http://192.168.101.80:5000/predict'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(predictionRequest),
+        );
+        print("Prediction API response status: ${response.statusCode}");
+        print("Prediction API response body: ${response.body}");
+
+        if (response.statusCode == 200) {
+          final predictionResult = json.decode(response.body);
+          bool isSpam = predictionResult['isSpam'] ?? false;
+          String? keyword = predictionResult['keyword'] ?? "unknown";
+          double confidenceLevel =
+              (predictionResult['confidenceLevel'] ?? 0.0).toDouble();
+          double processingTime =
+              (predictionResult['processingTime'] ?? 0.0).toDouble();
+
+          print(
+              "Is Spam: $isSpam, Keyword: $keyword, Confidence: $confidenceLevel");
+
+          if (isSpam) {
+            print("Adding to spamContact collection.");
+            try {
+              // Retrieve name based on senderPhoneNumber
+              String? senderName;
+
+              // Check in the user's contact collection
+              final contactSnapshot = await firestore
+                  .collection('contact')
+                  .where('smsUserID', isEqualTo: smsUserID)
+                  .where('phoneNo', isEqualTo: senderPhoneNumber)
+                  .get();
+
+              if (contactSnapshot.docs.isNotEmpty) {
+                senderName = contactSnapshot.docs.first.get('name');
+
+                for (var doc in contactSnapshot.docs) {
+                  try {
+                    await doc.reference.update({'isSpam': true});
+                    print("Updated isSpam field for contact: ${doc.id}");
+                  } catch (e) {
+                    print("Error updating isSpam field for contact: ${doc.id}, Error: $e");
+                  }
+                }
+              } else {
+                // If not in contact collection, check in smsUser collection
+                final smsUserSnapshot = await firestore
+                    .collection('smsUser')
+                    .where('phoneNo', isEqualTo: senderPhoneNumber)
+                    .get();
+
+                if (smsUserSnapshot.docs.isNotEmpty) {
+                  senderName = smsUserSnapshot.docs.first.get('name');
+                }
+              }
+
+              senderName ??= "Unknown"; // Default name if no match is found
+
+              // Check if a spamContact document already exists for this smsUserID
+              final spamContactQuery = await firestore
+                  .collection('spamContact')
+                  .where('smsUserID', isEqualTo: smsUserID)
+                  .where('phoneNo', isEqualTo: senderPhoneNumber)
+                  .get();
+
+              String spamContactID;
+              if (spamContactQuery.docs.isEmpty) {
+                // Create a new spamContact document
+                final newDoc = await firestore.collection('spamContact').add({
+                  'smsUserID': smsUserID,
+                  'phoneNo': senderPhoneNumber,
+                  'name': senderName,
+                });
+                spamContactID = newDoc.id;
+                print("Created new spamContact document with ID: $spamContactID");
+              } else {
+                // Use the existing spamContact document
+                spamContactID = spamContactQuery.docs.first.id;
+                print(
+                    "Found existing spamContact document with ID: $spamContactID");
+              }
+
+              // Add the spam message to the sub-collection
+              final spamMessageID = '${message.dateSent}_$senderPhoneNumber';
+              await firestore
+                  .collection('spamContact')
+                  .doc(spamContactID)
+                  .collection('spamMessages')
+                  .doc(spamMessageID)
+                  .set({
+                'spamMessageID': spamMessageID,
+                'messages': message.messageBody,
+                'keyword': keyword,
+                'confidenceLevel': confidenceLevel.toStringAsFixed(4),
+                'detectedAt': Timestamp.now(),
+                'processingTime': processingTime,
+              });
+
+              print("Spam message added to sub-collection successfully.");
+
+            } catch (e) {
+              print("Error adding to spamContact collection: $e");
+            }
+          } else {
+            print("Message is not spam.");
+          }
+        }
+      } catch (e) {
+        print("HTTP request error during spam detection: $e");
+      }
     }
+  }
 
-    print("User Phone: $userPhone");
-    print("Sender Phone Number: $senderPhoneNumber");
-
+  // Step 6: Store all messages in conversations and messages collections
+  try {
     // Generate conversationID
     final participants = [userPhone, senderPhoneNumber];
     participants.sort();
@@ -39,36 +251,53 @@ Future<void> backgroundMessageHandler(SmsMessage message) async {
     print("Generated conversationID: $conversationID");
 
     // Generate messageID
-    final messageID = '${message.dateSent}_${senderPhoneNumber}';
+    final messageID = '${message.dateSent}_$senderPhoneNumber';
     print("Generated messageID: $messageID");
 
-    // Check if the conversation exists
-    final conversationSnapshot = await firestore.collection('conversations').doc(conversationID).get();
-    if (!conversationSnapshot.exists) {
-        print("Creating new conversation with ID: $conversationID");
-        await firestore.collection('conversations').doc(conversationID).set({
-            'participants': participants,
-            'smsUserID': await getSmsUserID(userPhone) ?? "",
-            'lastMessageTimeStamp': Timestamp.now(),
-        });
+    // Check if the conversation exists for the current smsUserID
+    final conversationSnapshot = await firestore
+        .collection('conversations')
+        .where('smsUserID', isEqualTo: smsUserID)
+        .where('participants', arrayContains: senderPhoneNumber)
+        .get();
+
+    if (conversationSnapshot.docs.isEmpty) {
+      print("Creating new conversation with ID: $conversationID");
+      await firestore.collection('conversations').doc(conversationID).set({
+        'participants': participants,
+        'smsUserID': smsUserID,
+        'lastMessageTimeStamp': Timestamp.now(),
+      });
     } else {
-        print("Updating existing conversation timestamp for ID: $conversationID");
-        await firestore.collection('conversations').doc(conversationID).update({
-            'lastMessageTimeStamp': Timestamp.now(),
-        });
+      print("Updating existing conversation timestamp for ID: $conversationID");
+      await firestore
+          .collection('conversations')
+          .doc(conversationID)
+          .update({
+        'lastMessageTimeStamp': Timestamp.now(),
+      });
     }
 
     // Add message to messages sub-collection
-    await firestore.collection('conversations').doc(conversationID).collection('messages').doc(messageID).set({
-        'messageID': messageID,
-        'senderID': senderPhoneNumber,
-        'content': message.body ?? "",
-        'timestamp': message.dateSent != null ? Timestamp.fromMillisecondsSinceEpoch(message.dateSent!) : Timestamp.now(),
-        'isIncoming': true,
+    await firestore
+        .collection('conversations')
+        .doc(conversationID)
+        .collection('messages')
+        .doc(messageID)
+        .set({
+      'messageID': messageID,
+      'senderID': senderPhoneNumber,
+      'content': message.messageBody,
+      'timestamp': Timestamp.fromMillisecondsSinceEpoch(message.dateSent),
+      'isIncoming': true,
     }, SetOptions(merge: true));
 
     print("Message stored with ID: $messageID in conversationID: $conversationID");
+  } catch (e) {
+    print("Error adding message to conversations: $e");
+  }
 }
+
 
 
 
@@ -116,6 +345,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initialize();
+    _initializeSmsListener();
   }
 
   @override
@@ -444,12 +674,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _startMessageListeners() {
     telephony.listenIncomingSms(
       onNewMessage: (SmsMessage message) async {
-        await _storeSmsInFirestore(message, isIncoming: true);
+        await handleIncomingSms(message); // Pass to adapter function
       },
-      onBackgroundMessage: backgroundMessageHandler, 
+      onBackgroundMessage: handleIncomingSms, // Use the same adapter here
     );
     _startPollingSentMessages();
   }
+
 
   void _startPollingSentMessages() {
     pollTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
@@ -485,7 +716,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       participants.sort(); // Alphabetical order ensures consistency
       final conversationID = participants.join('_');
 
-      final messageID = '${message.dateSent}_${address}';
+      final messageID = '${message.dateSent}_$address';
 
       final messageTimestamp = message.dateSent != null 
           ? Timestamp.fromMillisecondsSinceEpoch(message.dateSent!)

@@ -1,18 +1,20 @@
 package com.smsecure.app
 
-import android.content.pm.PackageManager
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.provider.Telephony
+import android.widget.Toast
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.FlutterEngineCache
+import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.MethodChannel
-import android.Manifest
-import android.net.Uri // ADD THIS IMPORT
-import androidx.core.content.ContextCompat
-import androidx.core.app.ActivityCompat
-import android.widget.Toast
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.tarumt.smsecure/sms"
@@ -20,7 +22,12 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        checkAndSetDefaultSmsApp()  // Call this method as soon as the activity is created
+
+        // Initialize and cache the FlutterEngine
+        initializeFlutterEngine()
+
+        // Check if the app is set as the default SMS app
+        checkAndSetDefaultSmsApp()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -45,7 +52,14 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // Check if the app is the default SMS handler and set it if it's not
+    private fun initializeFlutterEngine() {
+        val flutterEngine = FlutterEngine(this)
+        flutterEngine.dartExecutor.executeDartEntrypoint(
+            DartExecutor.DartEntrypoint.createDefault()
+        )
+        FlutterEngineCache.getInstance().put("my_engine_id", flutterEngine)
+    }
+
     private fun checkAndSetDefaultSmsApp() {
         val isDefault = Telephony.Sms.getDefaultSmsPackage(this) == packageName
         if (!isDefault) {
@@ -53,14 +67,12 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // Prompt the user to set the app as the default SMS application
     private fun setAsDefaultSmsApp() {
         val intent = Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT)
         intent.putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, packageName)
         startActivityForResult(intent, REQUEST_CODE_SMS_DEFAULT)
     }
 
-    // Handle the result of the default SMS app request
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
 
@@ -70,13 +82,11 @@ class MainActivity : FlutterActivity() {
                 // Now the app is the default SMS handler, proceed with permissions
                 checkAndRequestPermissions()
             } else {
-                // The user did not set the app as the default SMS handler
                 Toast.makeText(this, "Please set the app as the default SMS handler.", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    // Opens the app's settings page
     private fun openAppSettings() {
         try {
             val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
@@ -113,7 +123,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // Handle the result of the permission request
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 

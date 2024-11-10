@@ -22,7 +22,7 @@ void main() async {
   if (phone != null) {
     initialRoute = '/home';
   }
-
+  
   runApp(MyApp(initialRoute: initialRoute));
 }
 
