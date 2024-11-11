@@ -9,7 +9,7 @@ class QuarantineDetailsPage extends StatelessWidget {
   final String quarantineId;
   final storage = const FlutterSecureStorage();
 
-  QuarantineDetailsPage({super.key, required this.quarantineId});
+  const QuarantineDetailsPage({super.key, required this.quarantineId});
 
   Future<Map<String, dynamic>> _fetchQuarantineDetails() async {
     final firestore = FirebaseFirestore.instance;
@@ -224,7 +224,7 @@ class QuarantineDetailsPage extends StatelessWidget {
                           'Blacklist Contact',
                           color: Colors.red,
                           onTap: () {
-                            _removeFromQuarantine(context);
+                             _blacklistContact(context, quarantineId);
                           },
                         ),
                         _buildProfileOption(
@@ -232,7 +232,7 @@ class QuarantineDetailsPage extends StatelessWidget {
                           'Remove from Quarantine',
                           color: Colors.red,
                           onTap: () {
-                            _removeFromQuarantine(context);
+                            _removeFromSpamContact(context, quarantineId);
                           },
                         ),
 
@@ -248,7 +248,140 @@ class QuarantineDetailsPage extends StatelessWidget {
     );
   }
 
-  Future<void> _removeFromQuarantine(BuildContext context) async {
+  Future<void> _blacklistContact(BuildContext context, String quarantineId) async {
+    try {
+      // Fetch the contact data from the spamContact collection
+      final contactDoc =
+          await FirebaseFirestore.instance.collection('spamContact').doc(quarantineId).get();
+
+      if (!contactDoc.exists) {
+        throw 'Contact not found in spamContact collection.';
+      }
+
+      final contactData = contactDoc.data();
+
+      // Show confirmation dialog
+      final bool? confirm = await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Confirmation'),
+            content: Text(
+                'Are you sure you want to blacklist this contact (${contactData?['name']} - ${contactData?['phoneNo']})?'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(false); // User cancels
+                },
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(true); // User confirms
+                },
+                child: const Text('Blacklist'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirm == true) {
+        final phoneNo = contactData?['phoneNo'];
+        final smsUserID = contactData?['smsUserID'];
+
+        if (phoneNo == null || smsUserID == null) {
+          throw 'Invalid contact data: phoneNo or smsUserID is missing.';
+        }
+
+        // Add the contact to the blacklist collection
+        await FirebaseFirestore.instance.collection('blacklist').add({
+          'name': contactData?['name'],
+          'phoneNo': phoneNo,
+          'smsUserID': smsUserID,
+          'blacklistedFrom': 'Spam Contact', // Updated field
+          'blacklistedDateTime': Timestamp.now(), // New field
+        });
+
+        // Update isBlacklisted in the contact collection
+        final contactSnapshot = await FirebaseFirestore.instance
+            .collection('contact')
+            .where('smsUserID', isEqualTo: smsUserID)
+            .where('phoneNo', isEqualTo: phoneNo)
+            .get();
+
+        if (contactSnapshot.docs.isNotEmpty) {
+          for (var doc in contactSnapshot.docs) {
+            await doc.reference.update({'isBlacklisted': true});
+          }
+          print("Updated isBlacklisted field for contact(s) in the contact collection.");
+        } else {
+          print("No matching contact found in the contact collection.");
+        }
+
+        // Update isBlacklisted in the conversations collection
+        final conversationSnapshot = await FirebaseFirestore.instance
+            .collection('conversations')
+            .where('smsUserID', isEqualTo: smsUserID)
+            .where('participants', arrayContains: phoneNo)
+            .get();
+
+        if (conversationSnapshot.docs.isNotEmpty) {
+          for (var conversationDoc in conversationSnapshot.docs) {
+            await conversationDoc.reference.update({'isBlacklisted': true});
+          }
+          print("Updated isBlacklisted field for conversations involving the contact.");
+        } else {
+          print("No matching conversations found for the contact.");
+        }
+
+        // Show success message
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            builder: (BuildContext dialogContext) {
+              return AlertDialog(
+                title: const Text('Success'),
+                content: const Text('Contact has been successfully blacklisted.'),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop(); // Close the dialog
+                      Navigator.of(context).pop(true); // Return to the previous screen
+                    },
+                    child: const Text('OK'),
+                  ),
+                ],
+              );
+            },
+          );
+        }
+      }
+    } catch (e) {
+      // Show error message
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Error'),
+              content: Text('An error occurred: $e'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
+        );
+      }
+    }
+  }
+
+  Future<void> _removeFromSpamContact(BuildContext context, String spamContactId) async {
     final firestore = FirebaseFirestore.instance;
 
     final bool? confirm = await showDialog(
@@ -256,7 +389,7 @@ class QuarantineDetailsPage extends StatelessWidget {
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Confirmation'),
-          content: const Text('Are you sure you want to remove this contact from quarantine?'),
+          content: const Text('Are you sure you want to remove this contact from spam contacts?'),
           actions: [
             TextButton(
               onPressed: () {
@@ -277,47 +410,111 @@ class QuarantineDetailsPage extends StatelessWidget {
 
     if (confirm == true) {
       try {
-        await firestore.collection('quarantine').doc(quarantineId).delete();
+        // Fetch the spamContact document
+        final spamContactDoc = await firestore.collection('spamContact').doc(spamContactId).get();
+        if (!spamContactDoc.exists) {
+          throw "Spam contact document not found.";
+        }
 
-        showDialog(
-          context: context,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: const Text('Success'),
-              content: const Text('Contact removed from quarantine successfully.'),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).pop(true);
-                  },
-                  child: const Text('OK'),
-                ),
-              ],
-            );
-          },
-        );
+        final spamContactData = spamContactDoc.data();
+        final phoneNo = spamContactData?['phoneNo'];
+        final smsUserID = spamContactData?['smsUserID'];
+
+        if (phoneNo == null || smsUserID == null) {
+          throw "Invalid data in the spam contact document.";
+        }
+
+        // Delete associated spamMessages sub-collection
+        final spamMessagesQuery = await firestore
+            .collection('spamContact')
+            .doc(spamContactId)
+            .collection('spamMessages')
+            .get();
+
+        for (var spamMessageDoc in spamMessagesQuery.docs) {
+          await spamMessageDoc.reference.delete();
+        }
+
+        // Delete the spamContact document
+        await firestore.collection('spamContact').doc(spamContactId).delete();
+
+        // Update `isSpam` in the contact collection
+        final contactQuery = await firestore
+            .collection('contact')
+            .where('phoneNo', isEqualTo: phoneNo)
+            .where('smsUserID', isEqualTo: smsUserID)
+            .get();
+
+        if (contactQuery.docs.isNotEmpty) {
+          for (var contactDoc in contactQuery.docs) {
+            await contactDoc.reference.update({
+              'isSpam': false,
+            });
+          }
+        }
+
+        // Update `isSpam` in the conversations collection
+        final conversationQuery = await firestore
+            .collection('conversations')
+            .where('smsUserID', isEqualTo: smsUserID)
+            .where('participants', arrayContains: phoneNo)
+            .get();
+
+        if (conversationQuery.docs.isNotEmpty) {
+          for (var conversationDoc in conversationQuery.docs) {
+            await conversationDoc.reference.update({
+              'isSpam': false,
+            });
+          }
+        }
+
+        // Show success dialog
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            builder: (BuildContext dialogContext) {
+              return AlertDialog(
+                title: const Text('Success'),
+                content: const Text('Contact removed from spam contacts successfully.'),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop(); // Close the dialog
+                      Navigator.of(context).pop(true); // Return to the previous screen
+                    },
+                    child: const Text('OK'),
+                  ),
+                ],
+              );
+            },
+          );
+        }
       } catch (e) {
-        showDialog(
-          context: context,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: const Text('Error'),
-              content: Text('An error occurred while removing from quarantine: $e'),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text('OK'),
-                ),
-              ],
-            );
-          },
-        );
+        // Handle errors gracefully
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: const Text('Error'),
+                content: Text('An error occurred while removing from spam contacts: $e'),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text('OK'),
+                  ),
+                ],
+              );
+            },
+          );
+        }
       }
     }
   }
+
+
 
   Widget _buildProfileOption(IconData icon, String title, {Color? color, VoidCallback? onTap}) {
     return InkWell(

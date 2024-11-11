@@ -2,6 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:custom_clippers/custom_clippers.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:math';
+import 'package:intl/intl.dart';
+
+// Function to format the detectedAt field
+String formatDetectedAt(Timestamp detectedAt) {
+  final dateTime = detectedAt.toDate(); // Convert Timestamp to DateTime
+  final formatter = DateFormat('dd MMMM yyyy, HH:mm:ss'); // Define the format
+  return formatter.format(dateTime); // Format the DateTime
+}
+
+double sigmoid(double x) {
+  return 1 / (1 + exp(-x));
+}
+
+String formatConfidenceLevel(String rawConfidence) {
+  double rawScore = double.parse(rawConfidence);
+  double normalizedScore = sigmoid(rawScore);
+  double percentage = normalizedScore * 100;
+  return "${percentage.toStringAsFixed(2)}%";
+}
+
 
 class QuarantineChat extends StatefulWidget {
   final String conversationID;
@@ -42,13 +63,12 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
         return AlertDialog(
           title: const Text(
             "Spam Message Details",
-            textAlign: TextAlign.center, // Justify alignment
-            style: TextStyle(fontWeight: FontWeight.bold)
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.bold),
           ),
           content: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
               children: [
                 Text.rich(
                   TextSpan(
@@ -62,18 +82,38 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
                   ),
                   textAlign: TextAlign.justify,
                 ),
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      const TextSpan(
-                        text: "Confidence Level: ",
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center, // Ensures vertical alignment
+                  children: [
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            const TextSpan(
+                              text: "Confidence Level: ",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            TextSpan(
+                              text: formatConfidenceLevel(spamDetails['confidenceLevel']),
+                            ),
+                          ],
+                        ),
+                        textAlign: TextAlign.justify,
                       ),
-                      TextSpan(text: spamDetails['confidenceLevel']),
-                    ],
-                  ),
-                  textAlign: TextAlign.justify,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4.0), // Adds small spacing between text and icon
+                      child: GestureDetector(
+                        onTap: _showConfidenceInfoDialog, // Opens the info dialog
+                        child: const Icon(
+                          Icons.info_outline,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+
                 Text.rich(
                   TextSpan(
                     children: [
@@ -81,7 +121,9 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
                         text: "Detected At: ",
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      TextSpan(text: spamDetails['detectedAt'].toDate().toString()),
+                      TextSpan(
+                        text: formatDetectedAt(spamDetails['detectedAt']),
+                      ),
                     ],
                   ),
                   textAlign: TextAlign.justify,
@@ -112,7 +154,59 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
     );
   }
 
-
+  void _showConfidenceInfoDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text(
+            "Confidence Level Explanation",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: const SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  "The confidence level indicates how certain the model is about its spam prediction.",
+                  textAlign: TextAlign.justify,
+                ),
+                SizedBox(height: 10),
+                Text(
+                  "Details:",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  "- A higher value means the message is far from the decision boundary and is more confidently classified as spam.",
+                  textAlign: TextAlign.justify,
+                ),
+                Text(
+                  "- A lower value closer to zero indicates the model is less certain and the message is near the decision boundary.",
+                  textAlign: TextAlign.justify,
+                ),
+                SizedBox(height: 10),
+                Text(
+                  "Calculation:",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  "The value is derived from the SVM decision function and converted into a percentage using the sigmoid function.",
+                  textAlign: TextAlign.justify,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: const Text("Close"),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   Future<void> initializeData() async {
     userPhone = await storage.read(key: "userPhone");

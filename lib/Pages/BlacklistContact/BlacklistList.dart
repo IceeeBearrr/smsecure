@@ -300,6 +300,21 @@ class BlacklistList extends StatelessWidget {
           }
         }
 
+        // Update `isBlacklisted` in the conversations collection
+        final conversationQuery = await firestore
+            .collection('conversations')
+            .where('smsUserID', isEqualTo: smsUserID)
+            .where('participants', arrayContains: phoneNo)
+            .get();
+
+        if (conversationQuery.docs.isNotEmpty) {
+          for (var conversationDoc in conversationQuery.docs) {
+            await conversationDoc.reference.update({
+              'isBlacklisted': false,
+            });
+          }
+        }
+
         // Show success dialog after deletion
         if (parentContext.mounted) {
           showDialog(
@@ -344,4 +359,5 @@ class BlacklistList extends StatelessWidget {
       }
     }
   }
+
 }

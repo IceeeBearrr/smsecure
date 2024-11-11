@@ -163,9 +163,16 @@ class _RecentchatsState extends State<Recentchats> {
           }
 
           var conversations = snapshot.data!.docs;
+          
+          // Filter out blacklisted or spam conversations
+          conversations = conversations.where((conversation) {
+            bool isBlacklisted = conversation.get('isBlacklisted') ?? false;
+            bool isSpam = conversation.get('isSpam') ?? false;
+            return !isBlacklisted && !isSpam;
+          }).toList();
 
           // Filter conversations based on search text
-          conversations = conversations.where((conversation) {
+            conversations = conversations.where((conversation) {
             var participants = List<String>.from(conversation['participants'] ?? []);
             var otherUserPhone = participants.firstWhere((id) => id != widget.currentUserID, orElse: () => '');
             final contactDetails = contactCache[otherUserPhone] ?? {'name': otherUserPhone};

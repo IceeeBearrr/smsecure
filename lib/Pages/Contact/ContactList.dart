@@ -421,13 +421,24 @@ void _showMessageDialog(BuildContext context, String title, String message) {
         return;
       }
 
-      // Show confirmation dialog
+      // Check if contact exists in the whitelist
+      final existingWhitelist = await firestore
+          .collection('whitelist')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .where('phoneNo', isEqualTo: phoneNo)
+          .get();
+
+      bool contactExistsInWhitelist = existingWhitelist.docs.isNotEmpty;
+
+      // Show appropriate confirmation dialog
       final bool? confirm = await showDialog<bool>(
         context: context,
         builder: (BuildContext dialogContext) {
           return AlertDialog(
             title: const Text('Confirmation'),
-            content: Text('Are you sure you want to blacklist "$name"?'),
+            content: Text(contactExistsInWhitelist
+                ? 'The selected contact "$name" is already in the whitelist. By blacklisting this contact, it will also be removed from the whitelist. Do you want to continue?'
+                : 'Are you sure you want to blacklist "$name"?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -449,6 +460,8 @@ void _showMessageDialog(BuildContext context, String title, String message) {
         'name': name,
         'phoneNo': phoneNo,
         'smsUserID': smsUserID,
+        'blacklistedFrom': 'Contact', // New field
+        'blacklistedDateTime': Timestamp.now(), // New field
       });
 
       // Update isBlacklisted field in the contact collection
@@ -456,17 +469,25 @@ void _showMessageDialog(BuildContext context, String title, String message) {
         'isBlacklisted': true,
       });
 
-      // Check and remove from whitelist if the contact exists
-      final existingWhitelist = await firestore
-          .collection('whitelist')
-          .where('smsUserID', isEqualTo: smsUserID)
-          .where('phoneNo', isEqualTo: phoneNo)
-          .get();
-
-      if (existingWhitelist.docs.isNotEmpty) {
+      // Remove from whitelist if it exists
+      if (contactExistsInWhitelist) {
         for (var doc in existingWhitelist.docs) {
           await firestore.collection('whitelist').doc(doc.id).delete();
         }
+      }
+
+      // Check for existing conversations and update their isBlacklisted field
+      final existingConversations = await firestore
+          .collection('conversations')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .where('participants', arrayContains: phoneNo)
+          .get();
+
+      for (var conversation in existingConversations.docs) {
+        await firestore
+            .collection('conversations')
+            .doc(conversation.id)
+            .update({'isBlacklisted': true});
       }
 
       // Show success dialog
@@ -479,6 +500,7 @@ void _showMessageDialog(BuildContext context, String title, String message) {
       }
     }
   }
+
 
 
 

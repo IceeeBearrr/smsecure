@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:intl/intl.dart';
 
 class BlacklistDetailsPage extends StatelessWidget {
   final String blacklistId;
@@ -17,6 +18,8 @@ class BlacklistDetailsPage extends StatelessWidget {
       final blacklistData = blacklistSnapshot.data()!;
       final phoneNo = blacklistData['phoneNo'];
       final name = blacklistData['name'] ?? phoneNo;
+      final blacklistedFrom = blacklistData['blacklistedFrom'] ?? 'Unknown Source';
+      final blacklistedDateTime = blacklistData['blacklistedDateTime']?.toDate() ?? DateTime.now();
       String? profileImageUrl;
 
       // Attempt to retrieve profile image from contact collection
@@ -46,12 +49,16 @@ class BlacklistDetailsPage extends StatelessWidget {
         'name': name,
         'phoneNo': phoneNo,
         'profileImageUrl': profileImageUrl,
+        'blacklistedFrom': blacklistedFrom,
+        'blacklistedDateTime': blacklistedDateTime,
       };
     } else {
       return {
         'name': 'No Name',
         'phoneNo': 'No Number',
         'profileImageUrl': null,
+        'blacklistedFrom': 'Unknown',
+        'blacklistedDateTime': 'Unknown',
       };
     }
   }
@@ -150,6 +157,65 @@ class BlacklistDetailsPage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 10),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            const Text(
+                              'Blacklisted From',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                            const Spacer(),
+                            Text(
+                              data['blacklistedFrom'],
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            const Text(
+                              'Blacklisted At',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                            const Spacer(),
+                            Text(
+                              DateFormat('dd MMM yyyy, hh:mm a').format(data['blacklistedDateTime']),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 Padding(
@@ -249,6 +315,20 @@ class BlacklistDetailsPage extends StatelessWidget {
         if (contactQuery.docs.isNotEmpty) {
           for (var contactDoc in contactQuery.docs) {
             await contactDoc.reference.update({
+              'isBlacklisted': false,
+            });
+          }
+        }
+        // Update `isBlacklisted` in the conversations collection
+        final conversationQuery = await firestore
+            .collection('conversations')
+            .where('smsUserID', isEqualTo: smsUserID)
+            .where('participants', arrayContains: phoneNo)
+            .get();
+
+        if (conversationQuery.docs.isNotEmpty) {
+          for (var conversationDoc in conversationQuery.docs) {
+            await conversationDoc.reference.update({
               'isBlacklisted': false,
             });
           }

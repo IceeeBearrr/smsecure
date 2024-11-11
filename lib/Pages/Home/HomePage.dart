@@ -27,22 +27,31 @@ class CustomSmsMessage {
 void _initializeSmsListener() {
   smsChannel.setMethodCallHandler((call) async {
     if (call.method == "onSmsReceived") {
-      final Map<String, dynamic> smsData = Map<String, dynamic>.from(call.arguments);
-      String senderNumber = smsData["senderNumber"] ?? "Unknown";
-      String messageBody = smsData["messageBody"] ?? "No Content";
-      final dateSent = smsData["dateSent"] ?? DateTime.now().millisecondsSinceEpoch;
+      try {
+        // Ensure the arguments are properly formatted
+        final Map<String, dynamic> smsData = Map<String, dynamic>.from(call.arguments);
 
-      print("Received SMS in Flutter: $messageBody from $senderNumber");
+        // Extract SMS data
+        String senderNumber = smsData["senderNumber"] ?? "Unknown";
+        String messageBody = smsData["messageBody"] ?? "No Content";
+        final dateSent = smsData["dateSent"] ?? DateTime.now().millisecondsSinceEpoch;
 
-      // Create a `CustomSmsMessage` object
-      final CustomSmsMessage message = CustomSmsMessage(
-        senderNumber: senderNumber,
-        messageBody: messageBody,
-        dateSent: dateSent,
-      );
+        print("Received SMS in Flutter: $messageBody from $senderNumber");
 
-      // Pass the data to your handler
-      await backgroundMessageHandler(message);
+        // Create a `CustomSmsMessage` object
+        final CustomSmsMessage message = CustomSmsMessage(
+          senderNumber: senderNumber,
+          messageBody: messageBody,
+          dateSent: dateSent,
+        );
+
+        // Pass the data to your background handler
+        await backgroundMessageHandler(message);
+      } catch (e) {
+        print("Error processing incoming SMS: $e");
+      }
+    } else {
+      print("Unknown method call received: ${call.method}");
     }
   });
 }
@@ -119,142 +128,181 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
 
     bool isBlacklisted = blacklistSnapshot.docs.isNotEmpty;
 
+    // Generate conversationID
+    final participants = [userPhone, senderPhoneNumber];
+    participants.sort();
+    final conversationID = participants.join('_');
+
     if (isBlacklisted) {
-      print("Sender is blacklisted for smsUserID: $smsUserID. Skipping spam detection.");
-    } else {
-      // Perform spam detection for non-whitelisted and non-blacklisted users
-      final predictionRequest = {
-        'message': message.messageBody,
-        'senderPhone': senderPhoneNumber,
-      };
+      print("Sender is blacklisted for smsUserID: $smsUserID.");
 
-      try {
-        final response = await http.post(
-          Uri.parse('http://192.168.101.80:5000/predict'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode(predictionRequest),
-        );
-        print("Prediction API response status: ${response.statusCode}");
-        print("Prediction API response body: ${response.body}");
+      // Check if the conversation exists
+      final conversationSnapshot = await firestore
+          .collection('conversations')
+          .doc(conversationID)
+          .get();
 
-        if (response.statusCode == 200) {
-          final predictionResult = json.decode(response.body);
-          bool isSpam = predictionResult['isSpam'] ?? false;
-          String? keyword = predictionResult['keyword'] ?? "unknown";
-          double confidenceLevel =
-              (predictionResult['confidenceLevel'] ?? 0.0).toDouble();
-          double processingTime =
-              (predictionResult['processingTime'] ?? 0.0).toDouble();
+      if (!conversationSnapshot.exists) {
+        print("Creating new blacklisted conversation with ID: $conversationID.");
+        await firestore.collection('conversations').doc(conversationID).set({
+          'participants': participants,
+          'smsUserID': smsUserID,
+          'lastMessageTimeStamp': Timestamp.now(),
+          'isBlacklisted': true,
+          'isSpam': false,
+        });
+      } else if (conversationSnapshot.get('isBlacklisted') != true) {
+        print("Updating conversation to blacklisted for ID: $conversationID.");
+        await firestore
+            .collection('conversations')
+            .doc(conversationID)
+            .update({'isBlacklisted': true});
+      }
 
-          print(
-              "Is Spam: $isSpam, Keyword: $keyword, Confidence: $confidenceLevel");
+      // Add the message to the blacklisted conversation
+      final messageID = '${message.dateSent}_$senderPhoneNumber';
+      await firestore
+          .collection('conversations')
+          .doc(conversationID)
+          .collection('messages')
+          .doc(messageID)
+          .set({
+        'messageID': messageID,
+        'senderID': senderPhoneNumber,
+        'content': message.messageBody,
+        'timestamp': Timestamp.fromMillisecondsSinceEpoch(message.dateSent),
+        'isIncoming': true,
+        'isBlacklisted': true,
+      }, SetOptions(merge: true));
+      return; // Exit as the sender is blacklisted
+    }
 
-          if (isSpam) {
-            print("Adding to spamContact collection.");
-            try {
-              // Retrieve name based on senderPhoneNumber
-              String? senderName;
+    // Perform spam detection for non-whitelisted and non-blacklisted users
+    final predictionRequest = {
+      'message': message.messageBody,
+      'senderPhone': senderPhoneNumber,
+    };
 
-              // Check in the user's contact collection
-              final contactSnapshot = await firestore
-                  .collection('contact')
-                  .where('smsUserID', isEqualTo: smsUserID)
-                  .where('phoneNo', isEqualTo: senderPhoneNumber)
-                  .get();
+    try {
+      final response = await http.post(
+        Uri.parse('http://192.168.101.80:5000/predict'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(predictionRequest),
+      );
+      print("Prediction API response status: ${response.statusCode}");
+      print("Prediction API response body: ${response.body}");
 
-              if (contactSnapshot.docs.isNotEmpty) {
-                senderName = contactSnapshot.docs.first.get('name');
+      if (response.statusCode == 200) {
+        final predictionResult = json.decode(response.body);
+        bool isSpam = predictionResult['isSpam'] ?? false;
+        String? keyword = predictionResult['keyword'] ?? "unknown";
+        double confidenceLevel =
+            (predictionResult['confidenceLevel'] ?? 0.0).toDouble();
+        double processingTime =
+            (predictionResult['processingTime'] ?? 0.0).toDouble();
 
-                for (var doc in contactSnapshot.docs) {
-                  try {
-                    await doc.reference.update({'isSpam': true});
-                    print("Updated isSpam field for contact: ${doc.id}");
-                  } catch (e) {
-                    print("Error updating isSpam field for contact: ${doc.id}, Error: $e");
-                  }
-                }
-              } else {
-                // If not in contact collection, check in smsUser collection
-                final smsUserSnapshot = await firestore
-                    .collection('smsUser')
-                    .where('phoneNo', isEqualTo: senderPhoneNumber)
-                    .get();
+        print(
+            "Is Spam: $isSpam, Keyword: $keyword, Confidence: $confidenceLevel");
 
-                if (smsUserSnapshot.docs.isNotEmpty) {
-                  senderName = smsUserSnapshot.docs.first.get('name');
+        if (isSpam) {
+          print("Adding to spamContact collection.");
+          try {
+            String? senderName;
+
+            // Check in the user's contact collection
+            final contactSnapshot = await firestore
+                .collection('contact')
+                .where('smsUserID', isEqualTo: smsUserID)
+                .where('phoneNo', isEqualTo: senderPhoneNumber)
+                .get();
+
+            if (contactSnapshot.docs.isNotEmpty) {
+              senderName = contactSnapshot.docs.first.get('name');
+              for (var doc in contactSnapshot.docs) {
+                try {
+                  await doc.reference.update({'isSpam': true});
+                } catch (e) {
+                  print("Error updating isSpam field for contact: ${doc.id}, Error: $e");
                 }
               }
-
-              senderName ??= "Unknown"; // Default name if no match is found
-
-              // Check if a spamContact document already exists for this smsUserID
-              final spamContactQuery = await firestore
-                  .collection('spamContact')
-                  .where('smsUserID', isEqualTo: smsUserID)
-                  .where('phoneNo', isEqualTo: senderPhoneNumber)
-                  .get();
-
-              String spamContactID;
-              if (spamContactQuery.docs.isEmpty) {
-                // Create a new spamContact document
-                final newDoc = await firestore.collection('spamContact').add({
-                  'smsUserID': smsUserID,
-                  'phoneNo': senderPhoneNumber,
-                  'name': senderName,
-                });
-                spamContactID = newDoc.id;
-                print("Created new spamContact document with ID: $spamContactID");
-              } else {
-                // Use the existing spamContact document
-                spamContactID = spamContactQuery.docs.first.id;
-                print(
-                    "Found existing spamContact document with ID: $spamContactID");
-              }
-
-              // Add the spam message to the sub-collection
-              final spamMessageID = '${message.dateSent}_$senderPhoneNumber';
-              await firestore
-                  .collection('spamContact')
-                  .doc(spamContactID)
-                  .collection('spamMessages')
-                  .doc(spamMessageID)
-                  .set({
-                'spamMessageID': spamMessageID,
-                'messages': message.messageBody,
-                'keyword': keyword,
-                'confidenceLevel': confidenceLevel.toStringAsFixed(4),
-                'detectedAt': Timestamp.now(),
-                'processingTime': processingTime,
-              });
-
-              print("Spam message added to sub-collection successfully.");
-
-            } catch (e) {
-              print("Error adding to spamContact collection: $e");
             }
-          } else {
-            print("Message is not spam.");
+
+            senderName ??= "Unknown"; 
+
+            final spamContactQuery = await firestore
+                .collection('spamContact')
+                .where('smsUserID', isEqualTo: smsUserID)
+                .where('phoneNo', isEqualTo: senderPhoneNumber)
+                .get();
+
+            String spamContactID;
+            if (spamContactQuery.docs.isEmpty) {
+              final newDoc = await firestore.collection('spamContact').add({
+                'smsUserID': smsUserID,
+                'phoneNo': senderPhoneNumber,
+                'name': senderName,
+              });
+              spamContactID = newDoc.id;
+            } else {
+              spamContactID = spamContactQuery.docs.first.id;
+            }
+
+            final spamMessageID = '${message.dateSent}_$senderPhoneNumber';
+            await firestore
+                .collection('spamContact')
+                .doc(spamContactID)
+                .collection('spamMessages')
+                .doc(spamMessageID)
+                .set({
+              'spamMessageID': spamMessageID,
+              'messages': message.messageBody,
+              'keyword': keyword,
+              'confidenceLevel': confidenceLevel.toStringAsFixed(4),
+              'detectedAt': Timestamp.now(),
+              'processingTime': processingTime,
+            });
+
+          await firestore.collection('conversations').doc(conversationID).set({
+            'participants': participants,
+            'smsUserID': smsUserID,
+            'lastMessageTimeStamp': Timestamp.now(),
+            'isSpam': true,
+            'isBlacklisted': false,
+          }, SetOptions(merge: true));
+
+          final messageID = '${message.dateSent}_$senderPhoneNumber';
+          await firestore
+              .collection('conversations')
+              .doc(conversationID)
+              .collection('messages')
+              .doc(messageID)
+              .set({
+            'messageID': messageID,
+            'senderID': senderPhoneNumber,
+            'content': message.messageBody,
+            'timestamp': Timestamp.fromMillisecondsSinceEpoch(message.dateSent),
+            'isIncoming': true,
+            'isBlacklisted': false,
+          }, SetOptions(merge: true));
+
+          return; 
+
+          } catch (e) {
+            print("Error adding to spamContact collection: $e");
           }
         }
-      } catch (e) {
-        print("HTTP request error during spam detection: $e");
       }
+    } catch (e) {
+      print("HTTP request error during spam detection: $e");
     }
   }
 
   // Step 6: Store all messages in conversations and messages collections
   try {
-    // Generate conversationID
     final participants = [userPhone, senderPhoneNumber];
     participants.sort();
     final conversationID = participants.join('_');
-    print("Generated conversationID: $conversationID");
 
-    // Generate messageID
-    final messageID = '${message.dateSent}_$senderPhoneNumber';
-    print("Generated messageID: $messageID");
-
-    // Check if the conversation exists for the current smsUserID
     final conversationSnapshot = await firestore
         .collection('conversations')
         .where('smsUserID', isEqualTo: smsUserID)
@@ -262,14 +310,14 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
         .get();
 
     if (conversationSnapshot.docs.isEmpty) {
-      print("Creating new conversation with ID: $conversationID");
       await firestore.collection('conversations').doc(conversationID).set({
         'participants': participants,
         'smsUserID': smsUserID,
         'lastMessageTimeStamp': Timestamp.now(),
+        'isBlacklisted': false,
+        'isSpam': false,
       });
     } else {
-      print("Updating existing conversation timestamp for ID: $conversationID");
       await firestore
           .collection('conversations')
           .doc(conversationID)
@@ -278,7 +326,7 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
       });
     }
 
-    // Add message to messages sub-collection
+    final messageID = '${message.dateSent}_$senderPhoneNumber';
     await firestore
         .collection('conversations')
         .doc(conversationID)
@@ -290,9 +338,8 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
       'content': message.messageBody,
       'timestamp': Timestamp.fromMillisecondsSinceEpoch(message.dateSent),
       'isIncoming': true,
+      'isBlacklisted': false,
     }, SetOptions(merge: true));
-
-    print("Message stored with ID: $messageID in conversationID: $conversationID");
   } catch (e) {
     print("Error adding message to conversations: $e");
   }
@@ -741,6 +788,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               'content': message.body ?? "",
               'timestamp': messageTimestamp,
               'isIncoming': isIncoming,
+              'isBlacklisted': false,
             });
         
         await firestore.collection('conversations')
@@ -749,6 +797,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               'lastMessageTimeStamp': messageTimestamp,
               'participants': participants,
               'smsUserID': smsUserID ?? '',
+              'isBlacklisted': false,
+              'isSpam': false,
             }, SetOptions(merge: true));
       }
     } catch (e, stackTrace) {

@@ -9,7 +9,7 @@ class ContactDetailsPage extends StatelessWidget {
   final String contactId;
   final storage = const FlutterSecureStorage();
 
-  ContactDetailsPage({super.key, required this.contactId});
+  const ContactDetailsPage({super.key, required this.contactId});
 
   Future<Map<String, dynamic>> _fetchContactDetails() async {
     final firestore = FirebaseFirestore.instance;
@@ -168,29 +168,57 @@ class ContactDetailsPage extends StatelessWidget {
     );
   }
 
-  Future<void> _addToBlacklist(BuildContext context, Map<String, dynamic> contactData) async {
+  Future<void> _addToBlacklist(BuildContext context, String contactId) async {
     final firestore = FirebaseFirestore.instance;
 
     try {
-      // Check if the contact is already in the blacklist
-      final existingBlacklistQuery = await firestore
-          .collection('blacklist')
-          .where('phoneNo', isEqualTo: contactData['phoneNo'])
-          .where('smsUserID', isEqualTo: contactData['smsUserID'])
-          .get();
-
-      if (existingBlacklistQuery.docs.isNotEmpty) {
-        _showMessageDialog(context, "Error", "This contact is already in your blacklist.");
+      // Fetch contact details
+      final contactDoc = await firestore.collection('contact').doc(contactId).get();
+      if (!contactDoc.exists) {
+        _showMessageDialog(context, "Error", "Contact not found.");
         return;
       }
 
-      // Show confirmation dialog
+      final contactData = contactDoc.data();
+      final name = contactData?['name'];
+      final phoneNo = contactData?['phoneNo'];
+      final smsUserID = contactData?['smsUserID'];
+
+      if (name == null || phoneNo == null || smsUserID == null) {
+        _showMessageDialog(context, "Error", "Failed to retrieve contact details.");
+        return;
+      }
+
+      // Check if contact is already in the blacklist
+      final existingBlacklist = await firestore
+          .collection('blacklist')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .where('phoneNo', isEqualTo: phoneNo)
+          .get();
+
+      if (existingBlacklist.docs.isNotEmpty) {
+        _showMessageDialog(context, "Error", "This contact is already in the blacklist.");
+        return;
+      }
+
+      // Check if contact exists in the whitelist
+      final existingWhitelist = await firestore
+          .collection('whitelist')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .where('phoneNo', isEqualTo: phoneNo)
+          .get();
+
+      bool contactExistsInWhitelist = existingWhitelist.docs.isNotEmpty;
+
+      // Show appropriate confirmation dialog
       final bool? confirm = await showDialog<bool>(
         context: context,
         builder: (BuildContext dialogContext) {
           return AlertDialog(
             title: const Text('Confirmation'),
-            content: Text('Are you sure you want to blacklist "${contactData['name']}"?'),
+            content: Text(contactExistsInWhitelist
+                ? 'The selected contact "$name" is already in the whitelist. By blacklisting this contact, it will also be removed from the whitelist. Do you want to continue?'
+                : 'Are you sure you want to blacklist "$name"?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -207,51 +235,44 @@ class ContactDetailsPage extends StatelessWidget {
 
       if (confirm != true) return;
 
-      // Add to blacklist collection
+      // Add to blacklist
       await firestore.collection('blacklist').add({
-        'name': contactData['name'],
-        'phoneNo': contactData['phoneNo'],
-        'smsUserID': contactData['smsUserID'],
+        'name': name,
+        'phoneNo': phoneNo,
+        'smsUserID': smsUserID,
+        'blacklistedFrom': 'Contact', // New field
+        'blacklistedDateTime': Timestamp.now(), // New field
       });
 
-      // Update the `isBlacklisted` field in the contact collection
+      // Update isBlacklisted field in the contact collection
       await firestore.collection('contact').doc(contactId).update({
         'isBlacklisted': true,
       });
 
-      // Check and remove from whitelist if the contact exists
-      final existingWhitelistQuery = await firestore
-          .collection('whitelist')
-          .where('phoneNo', isEqualTo: contactData['phoneNo'])
-          .where('smsUserID', isEqualTo: contactData['smsUserID'])
-          .get();
-
-      if (existingWhitelistQuery.docs.isNotEmpty) {
-        for (var doc in existingWhitelistQuery.docs) {
+      // Remove from whitelist if it exists
+      if (contactExistsInWhitelist) {
+        for (var doc in existingWhitelist.docs) {
           await firestore.collection('whitelist').doc(doc.id).delete();
         }
       }
 
-      // Show success dialog and navigate back to ContactPage
+      // Check for existing conversations and update their isBlacklisted field
+      final existingConversations = await firestore
+          .collection('conversations')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .where('participants', arrayContains: phoneNo)
+          .get();
+
+      for (var conversation in existingConversations.docs) {
+        await firestore
+            .collection('conversations')
+            .doc(conversation.id)
+            .update({'isBlacklisted': true});
+      }
+
+      // Show success dialog
       if (context.mounted) {
-        await showDialog(
-          context: context,
-          builder: (BuildContext dialogContext) {
-            return AlertDialog(
-              title: const Text('Success'),
-              content: const Text('Contact successfully added to the blacklist.'),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop(); // Close success dialog
-                    Navigator.of(context).pop(); // Navigate back to ContactPage
-                  },
-                  child: const Text('OK'),
-                ),
-              ],
-            );
-          },
-        );
+        _showMessageDialog(context, "Success", "Contact successfully added to the blacklist.");
       }
     } catch (e) {
       if (context.mounted) {
@@ -473,7 +494,7 @@ class ContactDetailsPage extends StatelessWidget {
                           'Blacklist Contact',
                           color: Colors.red,
                           onTap: () {
-                            _addToBlacklist(context, data);
+                            _addToBlacklist(context, contactId);
                           },
                         ),
                       ],

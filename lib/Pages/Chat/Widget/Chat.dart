@@ -69,7 +69,12 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
           return const Center(child: CircularProgressIndicator());
         }
 
-        var messages = snapshot.data!.docs;
+        // Filter out messages that are blacklisted
+        var messages = snapshot.data!.docs.where((message) {
+          // Use message.data() to safely access fields
+          var data = message.data() as Map<String, dynamic>;
+          return !(data['isBlacklisted'] ?? false); // Default to false if isBlacklisted is not set
+        }).toList();
 
         // Scroll to bottom whenever new data is loaded
         WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
@@ -79,8 +84,9 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
           itemCount: messages.length,
           itemBuilder: (context, index) {
             var message = messages[index];
-            var messageContent = message['content'];
-            var senderID = message['senderID'];
+            var data = message.data() as Map<String, dynamic>; // Safely access message data
+            var messageContent = data['content'] ?? ''; // Default to an empty string if content is null
+            var senderID = data['senderID'] ?? '';
 
             // Check if the message was sent by the current user
             bool isSentByUser = senderID == userPhone;
