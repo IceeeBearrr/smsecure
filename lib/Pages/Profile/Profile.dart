@@ -6,6 +6,7 @@ import 'package:smsecure/Pages/Profile/ProfileInformation.dart';
 import 'package:smsecure/Pages/QuarantineFolder/QuarantineFolderPage.dart';
 import 'package:smsecure/Pages/WhitelistContact/WhitelistPage.dart';
 import 'package:smsecure/Pages/BlacklistContact/BlacklistPage.dart';
+import 'package:smsecure/Pages/Settings/Settings.dart';
 
 const FlutterSecureStorage secureStorage = FlutterSecureStorage();
 
@@ -178,11 +179,11 @@ class _ProfilePageState extends State<ProfilePage> {
                             _loadUserData(); // Reload data when returning
                           });
                         }),
-                        _buildProfileOption(Icons.settings, 'Customisable Filtering Settings', onTap: () {
+                        _buildProfileOption(Icons.settings, 'Settings', onTap: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const ProfileInformation(),
+                              builder: (context) => const SettingsPage(),
                             ),
                           ).then((_) {
                             _loadUserData(); // Reload data when returning

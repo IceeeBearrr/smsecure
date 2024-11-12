@@ -5,11 +5,17 @@ import 'package:smsecure/Pages/Chat/Widget/ChatBottomSheet.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:another_telephony/telephony.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:smsecure/Pages/Chat/ChatSettings.dart';
 
 class Chatpage extends StatefulWidget {
   final String conversationID;
+  final DateTime? initialTimestamp;
 
-  const Chatpage({super.key, required this.conversationID});
+  const Chatpage({
+    super.key,
+    required this.conversationID,
+    this.initialTimestamp,
+  });
 
   @override
   _ChatpageState createState() => _ChatpageState();
@@ -154,8 +160,8 @@ class _ChatpageState extends State<Chatpage> {
                 ),
               ],
             ),
-            actions: const [
-              Padding(
+            actions: [
+              const Padding(
                 padding: EdgeInsets.only(right: 25),
                 child: Icon(
                   Icons.call,
@@ -164,11 +170,22 @@ class _ChatpageState extends State<Chatpage> {
                 ),
               ),
               Padding(
-                padding: EdgeInsets.only(right: 10),
-                child: Icon(
-                  Icons.more_vert,
-                  color: Color(0xFF113953),
-                  size: 30,
+                padding: const EdgeInsets.only(right: 10),
+                child: IconButton(
+                  icon: const Icon(
+                    Icons.more_vert,
+                    color: Color(0xFF113953),
+                    size: 30,
+                  ),
+                  onPressed: () {
+                    // Navigate to ChatSettings
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ChatSettingsPage(conversationID: widget.conversationID),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -178,7 +195,10 @@ class _ChatpageState extends State<Chatpage> {
       body: Column(
         children: [
           Expanded(
-            child: Chat(conversationID: widget.conversationID),
+            child: Chat(
+              conversationID: widget.conversationID,
+              initialTimestamp: widget.initialTimestamp,
+            ),
           ),
           Chatbottomsheet(
             onSendMessage: (String messageContent) {

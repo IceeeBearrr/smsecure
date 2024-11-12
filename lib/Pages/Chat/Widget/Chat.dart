@@ -5,8 +5,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class Chat extends StatefulWidget {
   final String conversationID;
+  final DateTime? initialTimestamp;
 
-  const Chat({super.key, required this.conversationID});
+  const Chat({super.key, required this.conversationID, this.initialTimestamp});
 
   @override
   _ChatState createState() => _ChatState();
@@ -16,42 +17,63 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
   final storage = const FlutterSecureStorage();
   String? userPhone;
+  bool isJumpingToMessage = false;
 
   @override
   void initState() {
     super.initState();
     loadUserPhone();
-    WidgetsBinding.instance.addObserver(this); // Add observer for keyboard changes
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this); // Remove observer
+    WidgetsBinding.instance.removeObserver(this);
     _scrollController.dispose();
     super.dispose();
   }
 
-  @override
-  void didChangeMetrics() {
-    super.didChangeMetrics();
-    // This is called when the view insets change (keyboard shows/hides)
-    _scrollToBottom();
-  }
-
   Future<void> loadUserPhone() async {
-    // Retrieve the current user's phone number from secure storage
     userPhone = await storage.read(key: "userPhone");
-    setState(() {}); // Update the UI after retrieving the phone number
+    setState(() {});
   }
 
-  // Scroll to bottom function
-  void _scrollToBottom() {
+  /// Scroll to the last message
+  void scrollToBottom() {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
+    }
+  }
+
+  /// Jump to a specific message based on the provided timestamp
+  Future<void> jumpToMessage(DateTime timestamp) async {
+    QuerySnapshot messagesSnapshot = await FirebaseFirestore.instance
+        .collection('conversations')
+        .doc(widget.conversationID)
+        .collection('messages')
+        .orderBy('timestamp', descending: false)
+        .get();
+
+    List<QueryDocumentSnapshot> messages = messagesSnapshot.docs;
+    int targetIndex = messages.indexWhere((msg) {
+      var data = msg.data() as Map<String, dynamic>;
+      return (data['timestamp'] as Timestamp).toDate().isAtSameMomentAs(timestamp);
+    });
+
+    if (targetIndex != -1) {
+      isJumpingToMessage = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollController.animateTo(
+          targetIndex * 70.0, // Estimate message height
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+        isJumpingToMessage = false;
+      });
     }
   }
 
@@ -69,35 +91,37 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
           return const Center(child: CircularProgressIndicator());
         }
 
-        // Filter out messages that are blacklisted
-        var messages = snapshot.data!.docs.where((message) {
-          // Use message.data() to safely access fields
-          var data = message.data() as Map<String, dynamic>;
-          return !(data['isBlacklisted'] ?? false); // Default to false if isBlacklisted is not set
-        }).toList();
+        var messages = snapshot.data!.docs;
 
-        // Scroll to bottom whenever new data is loaded
-        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (widget.initialTimestamp != null && !isJumpingToMessage) {
+            jumpToMessage(widget.initialTimestamp!);
+          } else if (!isJumpingToMessage) {
+            scrollToBottom();
+          }
+        });
 
         return ListView.builder(
           controller: _scrollController,
           itemCount: messages.length,
           itemBuilder: (context, index) {
             var message = messages[index];
-            var data = message.data() as Map<String, dynamic>; // Safely access message data
-            var messageContent = data['content'] ?? ''; // Default to an empty string if content is null
+            var data = message.data() as Map<String, dynamic>;
+            var messageContent = data['content'] ?? '';
             var senderID = data['senderID'] ?? '';
+            var timestamp = data['timestamp'] as Timestamp;
 
-            // Check if the message was sent by the current user
             bool isSentByUser = senderID == userPhone;
+
+            bool isHighlighted = widget.initialTimestamp != null &&
+                timestamp.toDate().isAtSameMomentAs(widget.initialTimestamp!);
 
             return Padding(
               padding: isSentByUser
                   ? const EdgeInsets.only(left: 80, top: 10)
                   : const EdgeInsets.only(right: 80, top: 10),
               child: Align(
-                alignment:
-                    isSentByUser ? Alignment.centerRight : Alignment.centerLeft,
+                alignment: isSentByUser ? Alignment.centerRight : Alignment.centerLeft,
                 child: ClipPath(
                   clipper: isSentByUser
                       ? LowerNipMessageClipper(MessageType.send)
@@ -108,6 +132,9 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
                       color: isSentByUser
                           ? const Color(0xFF113953)
                           : const Color(0xFFE1E1E2),
+                      border: isHighlighted
+                          ? Border.all(color: Colors.orange, width: 2)
+                          : null,
                     ),
                     child: Text(
                       messageContent,
