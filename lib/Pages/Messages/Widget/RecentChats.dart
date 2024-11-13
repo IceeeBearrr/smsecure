@@ -20,6 +20,7 @@ class _RecentchatsState extends State<Recentchats> {
   String? currentUserSmsUserID;
   Map<String, Map<String, dynamic>> contactCache = {};
   bool isLoadingContacts = true;
+  List<String> spamContacts = []; // List to store spam contacts
 
   @override
   void initState() {
@@ -40,6 +41,11 @@ class _RecentchatsState extends State<Recentchats> {
         currentUserSmsUserID = smsUserSnapshot.docs.first.id;
       }
     }
+    
+    // Load spam contacts with `isRemoved: false` for the current user
+    if (currentUserSmsUserID != null) {
+      spamContacts = await fetchSpamContactsForCurrentUser(currentUserSmsUserID!);
+    }
 
     // Once we have the current user's smsUserID, preload contacts
     if (currentUserSmsUserID != null) {
@@ -49,6 +55,16 @@ class _RecentchatsState extends State<Recentchats> {
     setState(() {
       isLoadingContacts = false; // Set loading to false after preloading is complete
     });
+  }
+
+  Future<List<String>> fetchSpamContactsForCurrentUser(String smsUserID) async {
+    final spamSnapshot = await FirebaseFirestore.instance
+        .collection('spamContact')
+        .where('smsUserID', isEqualTo: smsUserID)
+        .where('isRemoved', isEqualTo: false)
+        .get();
+
+    return spamSnapshot.docs.map((doc) => doc['phoneNo'] as String).toList();
   }
 
   Future<void> preloadContacts() async {
@@ -163,6 +179,13 @@ class _RecentchatsState extends State<Recentchats> {
           }
 
           var conversations = snapshot.data!.docs;
+
+          // Filter out conversations involving spam contacts with `isRemoved: false`
+          conversations = conversations.where((conversation) {
+            var participants = List<String>.from(conversation['participants'] ?? []);
+            var otherUserPhone = participants.firstWhere((id) => id != widget.currentUserID, orElse: () => '');
+            return !spamContacts.contains(otherUserPhone); // Only exclude active spam contacts
+          }).toList();
           
           // Filter out blacklisted or spam conversations
           conversations = conversations.where((conversation) {

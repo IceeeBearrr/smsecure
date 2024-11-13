@@ -241,6 +241,7 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
                 'smsUserID': smsUserID,
                 'phoneNo': senderPhoneNumber,
                 'name': senderName,
+                'isRemoved': false,
               });
               spamContactID = newDoc.id;
             } else {

@@ -9,7 +9,7 @@ class WhitelistDetailsPage extends StatelessWidget {
   final String whitelistId;
   final storage = const FlutterSecureStorage();
 
-  WhitelistDetailsPage({super.key, required this.whitelistId});
+  const WhitelistDetailsPage({super.key, required this.whitelistId});
 
   Future<Map<String, dynamic>> _fetchWhitelistDetails() async {
     final firestore = FirebaseFirestore.instance;

@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:smsecure/Pages/Chat/SearchChat/SearchMessgaeChatPage.dart';
+import 'package:smsecure/Pages/Chat/Bookmark/MessageBookmark.dart';
+import 'package:smsecure/Pages/Messages/Messages.dart';
 
 class ChatSettingsPage extends StatefulWidget {
   final String conversationID;
 
-  const ChatSettingsPage({Key? key, required this.conversationID})
-      : super(key: key);
+  const ChatSettingsPage({super.key, required this.conversationID});
 
   @override
   _ChatSettingsPageState createState() => _ChatSettingsPageState();
@@ -39,8 +40,9 @@ class _ChatSettingsPageState extends State<ChatSettingsPage> {
           .doc(widget.conversationID)
           .get();
 
-      if (!conversationSnapshot.exists)
+      if (!conversationSnapshot.exists) {
         throw Exception("Conversation not found");
+      }
 
       // Step 3: Get the participant's phone number
       var participants =
@@ -50,8 +52,9 @@ class _ChatSettingsPageState extends State<ChatSettingsPage> {
         orElse: () => 'Unknown',
       );
 
-      if (participantPhoneNo == 'Unknown')
+      if (participantPhoneNo == 'Unknown') {
         throw Exception("Participant not found");
+      }
 
       // Step 4: Retrieve participant details from the 'contact' collection
       QuerySnapshot contactSnapshot = await FirebaseFirestore.instance
@@ -112,11 +115,173 @@ class _ChatSettingsPageState extends State<ChatSettingsPage> {
     }
   }
 
+  Future<void> blacklistParticipant() async {
+    try {
+      String? currentUserPhone = await storage.read(key: "userPhone");
+      if (currentUserPhone == null) throw Exception("User phone not found");
+
+      QuerySnapshot smsUserQuery = await FirebaseFirestore.instance
+          .collection('smsUser')
+          .where('phoneNo', isEqualTo: currentUserPhone)
+          .limit(1)
+          .get();
+
+      if (smsUserQuery.docs.isEmpty) {
+        throw Exception("SMS user not found");
+      }
+
+      String smsUserID = smsUserQuery.docs.first.id;
+
+      // Add to blacklist collection
+      await FirebaseFirestore.instance.collection('blacklist').add({
+        'blacklistedDateTime': Timestamp.now(),
+        'blacklistedFrom': 'Chat',
+        'name': participantName,
+        'phoneNo': participantPhoneNo,
+        'smsUserID': smsUserID,
+      });
+
+      // Update contact collection
+      QuerySnapshot contactQuery = await FirebaseFirestore.instance
+          .collection('contact')
+          .where('phoneNo', isEqualTo: participantPhoneNo)
+          .where('smsUserID', isEqualTo: smsUserID)
+          .get();
+
+      for (var doc in contactQuery.docs) {
+        await doc.reference.update({'isBlacklisted': true});
+      }
+
+      // Update conversations collection
+      await FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(widget.conversationID)
+          .update({'isBlacklisted': true});
+
+      // Show success message
+      _showSuccessDialog(
+        context,
+        "Blacklist Success",
+        "The participant has been successfully blacklisted.",
+      );
+    } catch (e) {
+      debugPrint("Error blacklisting participant: $e");
+      _showErrorDialog(
+        context,
+        "Blacklist Error",
+        "Failed to blacklist participant. Please try again.",
+      );
+    }
+  }
+
+  Future<void> deleteConversation() async {
+    try {
+      // Delete messages sub-collection
+      QuerySnapshot messagesSnapshot = await FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(widget.conversationID)
+          .collection('messages')
+          .get();
+
+      for (var messageDoc in messagesSnapshot.docs) {
+        QuerySnapshot translatedMessagesSnapshot = await messageDoc.reference
+            .collection('translatedMessages')
+            .get();
+
+        // Delete translatedMessages sub-collection
+        for (var translatedMessageDoc in translatedMessagesSnapshot.docs) {
+          await translatedMessageDoc.reference.delete();
+        }
+
+        // Delete message document
+        await messageDoc.reference.delete();
+      }
+
+      // Delete conversation document
+      await FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(widget.conversationID)
+          .delete();
+
+      // Show success message
+      _showSuccessDialog(
+        context,
+        "Delete Success",
+        "The conversation has been successfully deleted.",
+      );
+
+    } catch (e) {
+      debugPrint("Error deleting conversation: $e");
+      _showErrorDialog(
+        context,
+        "Delete Error",
+        "Failed to delete conversation. Please try again.",
+      );
+    }
+  }
+
+  void _showErrorDialog(BuildContext context, String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog
+              },
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+
+  void _showSuccessDialog(
+      BuildContext context, String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // Close the dialog
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const Messages(), // Navigate to Message.dart
+                ),
+                (Route<dynamic> route) => false, // Remove all previous routes
+              );
+            },
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chat Settings'),
+        title: const Text(
+          "Chat Settings",
+          style: TextStyle(
+            color: Color(0xFF113953),
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -190,7 +355,14 @@ class _ChatSettingsPageState extends State<ChatSettingsPage> {
                             title: const Text('Pinned Messages'),
                             trailing: const Icon(Icons.arrow_forward_ios),
                             onTap: () {
-                              // Navigate to Pinned Messages Page
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => MessageBookmark(
+                                    conversationId: widget.conversationID,
+                                  ),
+                                ),
+                              );
                             },
                           ),
                         ],
@@ -203,17 +375,13 @@ class _ChatSettingsPageState extends State<ChatSettingsPage> {
                     children: [
                       SettingsTile(
                         title: 'Blacklist',
-                        onTap: () {
-                          // Blacklist User Logic
-                        },
+                        onTap: blacklistParticipant,
                         textColor: Colors.red,
                       ),
                       const SizedBox(height: 2),
                       SettingsTile(
                         title: 'Delete Conversations',
-                        onTap: () {
-                          // Delete Conversations Logic
-                        },
+                        onTap: deleteConversation,
                         textColor: Colors.red,
                       ),
                       const SizedBox(height: 15),
@@ -235,8 +403,8 @@ class SettingsTile extends StatelessWidget {
     required this.title,
     required this.onTap,
     this.textColor,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {

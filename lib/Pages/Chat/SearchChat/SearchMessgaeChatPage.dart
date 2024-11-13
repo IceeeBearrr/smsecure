@@ -76,7 +76,14 @@ class _SearchMessageChatPageState extends State<SearchMessageChatPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Search Messages'),
+        title: const Text(
+          "Search Messages",
+          style: TextStyle(
+            color: Color(0xFF113953),
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {

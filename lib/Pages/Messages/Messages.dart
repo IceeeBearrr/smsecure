@@ -30,70 +30,74 @@ class _MessagesState extends State<Messages> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 25, right: 240, bottom: 25),
-            child: Text(
-              "Messages",
-              style: TextStyle(
-                color: Color(0xFF113953),
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
+      body: SafeArea(
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 25, right: 240, bottom: 25),
+              child: Text(
+                "Messages",
+                style: TextStyle(
+                  color: Color(0xFF113953),
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15),
-            child: Container(
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 15),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.5),
-                    blurRadius: 10,
-                    spreadRadius: 2,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.search,
-                    color: Color(0xFF113953),
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 15),
-                      child: TextFormField(
-                        decoration: const InputDecoration(
-                          hintText: "Search by name or phone number",
-                          border: InputBorder.none,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 15),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.5),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.search,
+                      color: Color(0xFF113953),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 15),
+                        child: TextFormField(
+                          decoration: const InputDecoration(
+                            hintText: "Search by name or phone number",
+                            border: InputBorder.none,
+                          ),
+                          onChanged: (value) {
+                            setState(() {
+                              searchText = value
+                                  .trim()
+                                  .toLowerCase(); // Update search input
+                            });
+                          },
                         ),
-                        onChanged: (value) {
-                          setState(() {
-                            searchText = value.trim().toLowerCase(); // Update search input
-                          });
-                        },
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          Expanded(
-            child: userPhone != null
-                ? Recentchats(
-                    currentUserID: userPhone!,
-                    searchText: searchText, // Pass search text
-                  )
-                : const Center(child: CircularProgressIndicator()),
-          ),
-        ],
+            Expanded(
+              child: userPhone != null
+                  ? Recentchats(
+                      currentUserID: userPhone!,
+                      searchText: searchText, // Pass search text
+                    )
+                  : const Center(child: CircularProgressIndicator()),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -80,6 +80,7 @@ class _QuarantineFolderListState extends State<QuarantineFolderList> {
         stream: FirebaseFirestore.instance
             .collection('spamContact')
             .where('smsUserID', isEqualTo: widget.currentUserID)
+            .where('isRemoved', isEqualTo: false)
             .orderBy('name')
             .snapshots(),
         builder: (context, quarantineSnapshot) {
@@ -474,7 +475,7 @@ class _QuarantineFolderListState extends State<QuarantineFolderList> {
         return AlertDialog(
           title: const Text('Confirmation'),
           content: const Text(
-              'Are you sure you want to remove this contact from spam contacts?'),
+              'Are you sure you want to mark this contact as removed?'),
           actions: [
             TextButton(
               onPressed: () {
@@ -510,6 +511,11 @@ class _QuarantineFolderListState extends State<QuarantineFolderList> {
           throw "Invalid data in the spam contact document.";
         }
 
+        // Update `isRemoved` field in the spamContact document
+        await firestore.collection('spamContact').doc(spamContactId).update({
+          'isRemoved': true,
+        });
+
         // Delete associated spamMessages sub-collection
         final spamMessagesQuery = await firestore
             .collection('spamContact')
@@ -520,9 +526,6 @@ class _QuarantineFolderListState extends State<QuarantineFolderList> {
         for (var spamMessageDoc in spamMessagesQuery.docs) {
           await spamMessageDoc.reference.delete();
         }
-
-        // Delete the spamContact document
-        await firestore.collection('spamContact').doc(spamContactId).delete();
 
         // Update `isSpam` in the contact collection
         final contactQuery = await firestore
@@ -562,7 +565,7 @@ class _QuarantineFolderListState extends State<QuarantineFolderList> {
               return AlertDialog(
                 title: const Text('Success'),
                 content: const Text(
-                    'Contact removed from spam contacts successfully.'),
+                    'Contact marked as removed from spam contacts successfully.'),
                 actions: [
                   TextButton(
                     onPressed: () {
@@ -585,7 +588,7 @@ class _QuarantineFolderListState extends State<QuarantineFolderList> {
               return AlertDialog(
                 title: const Text('Error'),
                 content: Text(
-                    'An error occurred while removing from spam contacts: $e'),
+                    'An error occurred while marking the contact as removed: $e'),
                 actions: [
                   TextButton(
                     onPressed: () {

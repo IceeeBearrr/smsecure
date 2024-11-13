@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:smsecure/Pages/WhitelistContact/WhitelistDetail.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class EditWhitelistPage extends StatefulWidget {
   final String whitelistId;

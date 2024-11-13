@@ -13,7 +13,8 @@ class QuarantineDetailsPage extends StatelessWidget {
 
   Future<Map<String, dynamic>> _fetchQuarantineDetails() async {
     final firestore = FirebaseFirestore.instance;
-    final quarantineSnapshot = await firestore.collection('spamContact').doc(quarantineId).get();
+    final quarantineSnapshot =
+        await firestore.collection('spamContact').doc(quarantineId).get();
 
     if (quarantineSnapshot.exists) {
       final quarantineData = quarantineSnapshot.data()!;
@@ -36,7 +37,10 @@ class QuarantineDetailsPage extends StatelessWidget {
         if (profileImageUrl == null || profileImageUrl.isEmpty) {
           final registeredSMSUserID = contactData['registeredSMSUserID'];
           if (registeredSMSUserID != null && registeredSMSUserID.isNotEmpty) {
-            final smsUserDoc = await firestore.collection('smsUser').doc(registeredSMSUserID).get();
+            final smsUserDoc = await firestore
+                .collection('smsUser')
+                .doc(registeredSMSUserID)
+                .get();
             if (smsUserDoc.exists) {
               profileImageUrl = smsUserDoc.data()?['profileImageUrl'];
             }
@@ -69,20 +73,21 @@ class QuarantineDetailsPage extends StatelessWidget {
 
     QuerySnapshot conversationSnapshot = await firestore
         .collection('conversations')
-        .where('participants', arrayContainsAny: [userPhone])
-        .get();
+        .where('participants', arrayContainsAny: [userPhone]).get();
 
     String? conversationID;
     for (var doc in conversationSnapshot.docs) {
       List<dynamic> participants = doc['participants'];
-      if (participants.contains(receiverPhone) && participants.contains(userPhone)) {
+      if (participants.contains(receiverPhone) &&
+          participants.contains(userPhone)) {
         conversationID = doc.id;
         break;
       }
     }
 
     if (conversationID == null) {
-      DocumentReference newConversation = await firestore.collection('conversations').add({
+      DocumentReference newConversation =
+          await firestore.collection('conversations').add({
         'participants': [userPhone, receiverPhone],
       });
       conversationID = newConversation.id;
@@ -123,19 +128,22 @@ class QuarantineDetailsPage extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return const Center(child: Text("Error fetching quarantine details"));
+            return const Center(
+                child: Text("Error fetching quarantine details"));
           }
           if (!snapshot.hasData) {
             return const Center(child: Text("No quarantine details available"));
           }
 
           final data = snapshot.data!;
-          final profileImage = data['profileImageUrl'] != null && data['profileImageUrl'].isNotEmpty
+          final profileImage = data['profileImageUrl'] != null &&
+                  data['profileImageUrl'].isNotEmpty
               ? MemoryImage(base64Decode(data['profileImageUrl']))
               : null;
 
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 13.0, horizontal: 10.0),
+            padding:
+                const EdgeInsets.symmetric(vertical: 13.0, horizontal: 10.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -147,7 +155,8 @@ class QuarantineDetailsPage extends StatelessWidget {
                       backgroundColor: Colors.grey[300],
                       backgroundImage: profileImage as ImageProvider<Object>?,
                       child: profileImage == null
-                          ? const Icon(Icons.person, size: 50, color: Colors.white)
+                          ? const Icon(Icons.person,
+                              size: 50, color: Colors.white)
                           : null,
                     ),
                     const SizedBox(height: 15),
@@ -166,7 +175,8 @@ class QuarantineDetailsPage extends StatelessWidget {
                         borderRadius: BorderRadius.circular(15),
                       ),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 15, vertical: 10),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(10),
@@ -211,11 +221,13 @@ class QuarantineDetailsPage extends StatelessWidget {
                     ),
                     child: Column(
                       children: [
-                        _buildProfileOption(Icons.message, 'View Message Detail', onTap: () {
+                        _buildProfileOption(
+                            Icons.message, 'View Message Detail', onTap: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => QuarantineChatPage(quarantineId: quarantineId),
+                              builder: (context) => QuarantineChatPage(
+                                  quarantineId: quarantineId),
                             ),
                           );
                         }),
@@ -224,7 +236,7 @@ class QuarantineDetailsPage extends StatelessWidget {
                           'Blacklist Contact',
                           color: Colors.red,
                           onTap: () {
-                             _blacklistContact(context, quarantineId);
+                            _blacklistContact(context, quarantineId);
                           },
                         ),
                         _buildProfileOption(
@@ -235,7 +247,6 @@ class QuarantineDetailsPage extends StatelessWidget {
                             _removeFromSpamContact(context, quarantineId);
                           },
                         ),
-
                       ],
                     ),
                   ),
@@ -248,11 +259,14 @@ class QuarantineDetailsPage extends StatelessWidget {
     );
   }
 
-  Future<void> _blacklistContact(BuildContext context, String quarantineId) async {
+  Future<void> _blacklistContact(
+      BuildContext context, String quarantineId) async {
     try {
       // Fetch the contact data from the spamContact collection
-      final contactDoc =
-          await FirebaseFirestore.instance.collection('spamContact').doc(quarantineId).get();
+      final contactDoc = await FirebaseFirestore.instance
+          .collection('spamContact')
+          .doc(quarantineId)
+          .get();
 
       if (!contactDoc.exists) {
         throw 'Contact not found in spamContact collection.';
@@ -314,7 +328,8 @@ class QuarantineDetailsPage extends StatelessWidget {
           for (var doc in contactSnapshot.docs) {
             await doc.reference.update({'isBlacklisted': true});
           }
-          print("Updated isBlacklisted field for contact(s) in the contact collection.");
+          print(
+              "Updated isBlacklisted field for contact(s) in the contact collection.");
         } else {
           print("No matching contact found in the contact collection.");
         }
@@ -330,7 +345,8 @@ class QuarantineDetailsPage extends StatelessWidget {
           for (var conversationDoc in conversationSnapshot.docs) {
             await conversationDoc.reference.update({'isBlacklisted': true});
           }
-          print("Updated isBlacklisted field for conversations involving the contact.");
+          print(
+              "Updated isBlacklisted field for conversations involving the contact.");
         } else {
           print("No matching conversations found for the contact.");
         }
@@ -342,12 +358,14 @@ class QuarantineDetailsPage extends StatelessWidget {
             builder: (BuildContext dialogContext) {
               return AlertDialog(
                 title: const Text('Success'),
-                content: const Text('Contact has been successfully blacklisted.'),
+                content:
+                    const Text('Contact has been successfully blacklisted.'),
                 actions: [
                   TextButton(
                     onPressed: () {
                       Navigator.of(dialogContext).pop(); // Close the dialog
-                      Navigator.of(context).pop(true); // Return to the previous screen
+                      Navigator.of(context)
+                          .pop(true); // Return to the previous screen
                     },
                     child: const Text('OK'),
                   ),
@@ -381,7 +399,8 @@ class QuarantineDetailsPage extends StatelessWidget {
     }
   }
 
-  Future<void> _removeFromSpamContact(BuildContext context, String spamContactId) async {
+  Future<void> _removeFromSpamContact(
+      BuildContext context, String spamContactId) async {
     final firestore = FirebaseFirestore.instance;
 
     final bool? confirm = await showDialog(
@@ -389,7 +408,8 @@ class QuarantineDetailsPage extends StatelessWidget {
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Confirmation'),
-          content: const Text('Are you sure you want to remove this contact from spam contacts?'),
+          content: const Text(
+              'Are you sure you want to mark this contact as removed from spam contacts?'),
           actions: [
             TextButton(
               onPressed: () {
@@ -411,7 +431,8 @@ class QuarantineDetailsPage extends StatelessWidget {
     if (confirm == true) {
       try {
         // Fetch the spamContact document
-        final spamContactDoc = await firestore.collection('spamContact').doc(spamContactId).get();
+        final spamContactDoc =
+            await firestore.collection('spamContact').doc(spamContactId).get();
         if (!spamContactDoc.exists) {
           throw "Spam contact document not found.";
         }
@@ -424,6 +445,11 @@ class QuarantineDetailsPage extends StatelessWidget {
           throw "Invalid data in the spam contact document.";
         }
 
+        // Update `isRemoved` field in the spamContact document
+        await firestore.collection('spamContact').doc(spamContactId).update({
+          'isRemoved': true,
+        });
+
         // Delete associated spamMessages sub-collection
         final spamMessagesQuery = await firestore
             .collection('spamContact')
@@ -434,9 +460,6 @@ class QuarantineDetailsPage extends StatelessWidget {
         for (var spamMessageDoc in spamMessagesQuery.docs) {
           await spamMessageDoc.reference.delete();
         }
-
-        // Delete the spamContact document
-        await firestore.collection('spamContact').doc(spamContactId).delete();
 
         // Update `isSpam` in the contact collection
         final contactQuery = await firestore
@@ -475,12 +498,14 @@ class QuarantineDetailsPage extends StatelessWidget {
             builder: (BuildContext dialogContext) {
               return AlertDialog(
                 title: const Text('Success'),
-                content: const Text('Contact removed from spam contacts successfully.'),
+                content: const Text(
+                    'Contact marked as removed from spam contacts successfully.'),
                 actions: [
                   TextButton(
                     onPressed: () {
                       Navigator.of(dialogContext).pop(); // Close the dialog
-                      Navigator.of(context).pop(true); // Return to the previous screen
+                      Navigator.of(context)
+                          .pop(true); // Return to the previous screen
                     },
                     child: const Text('OK'),
                   ),
@@ -497,7 +522,8 @@ class QuarantineDetailsPage extends StatelessWidget {
             builder: (BuildContext context) {
               return AlertDialog(
                 title: const Text('Error'),
-                content: Text('An error occurred while removing from spam contacts: $e'),
+                content: Text(
+                    'An error occurred while marking as removed from spam contacts: $e'),
                 actions: [
                   TextButton(
                     onPressed: () {
@@ -514,9 +540,8 @@ class QuarantineDetailsPage extends StatelessWidget {
     }
   }
 
-
-
-  Widget _buildProfileOption(IconData icon, String title, {Color? color, VoidCallback? onTap}) {
+  Widget _buildProfileOption(IconData icon, String title,
+      {Color? color, VoidCallback? onTap}) {
     return InkWell(
       onTap: onTap,
       child: Padding(

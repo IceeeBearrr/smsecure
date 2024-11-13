@@ -80,7 +80,7 @@ class ContactDetailsPage extends StatelessWidget {
 
       if (existingWhitelistQuery.docs.isNotEmpty) {
         // If phone number already exists, show error message
-        _showMessageDialog(context, "Error", "This contact is already in your whitelist.");
+        _showMessageDialog(context, "Error", "This contact is already in your whitelist.",null);
         return;
       }
 
@@ -140,15 +140,15 @@ class ContactDetailsPage extends StatelessWidget {
 
       // Show error message
       if (context.mounted) {
-        _showMessageDialog(context, "Error", "Error adding to whitelist: $e");
+        _showMessageDialog(context, "Error", "Error adding to whitelist: $e",null);
       }
     }
   }
 
 
 
-
-  void _showMessageDialog(BuildContext context, String title, String message) {
+  void _showMessageDialog(
+      BuildContext context, String title, String message, VoidCallback? onDialogClose) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -158,7 +158,10 @@ class ContactDetailsPage extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop();
+                Navigator.of(context).pop(); // Close the dialog
+                if (onDialogClose != null) {
+                  onDialogClose(); // Trigger the callback for navigation or other actions
+                }
               },
               child: const Text("OK"),
             ),
@@ -168,6 +171,8 @@ class ContactDetailsPage extends StatelessWidget {
     );
   }
 
+
+
   Future<void> _addToBlacklist(BuildContext context, String contactId) async {
     final firestore = FirebaseFirestore.instance;
 
@@ -175,7 +180,7 @@ class ContactDetailsPage extends StatelessWidget {
       // Fetch contact details
       final contactDoc = await firestore.collection('contact').doc(contactId).get();
       if (!contactDoc.exists) {
-        _showMessageDialog(context, "Error", "Contact not found.");
+        _showMessageDialog(context, "Error", "Contact not found.", null);
         return;
       }
 
@@ -185,7 +190,7 @@ class ContactDetailsPage extends StatelessWidget {
       final smsUserID = contactData?['smsUserID'];
 
       if (name == null || phoneNo == null || smsUserID == null) {
-        _showMessageDialog(context, "Error", "Failed to retrieve contact details.");
+        _showMessageDialog(context, "Error", "Failed to retrieve contact details.", null);
         return;
       }
 
@@ -197,7 +202,7 @@ class ContactDetailsPage extends StatelessWidget {
           .get();
 
       if (existingBlacklist.docs.isNotEmpty) {
-        _showMessageDialog(context, "Error", "This contact is already in the blacklist.");
+        _showMessageDialog(context, "Error", "This contact is already in the blacklist.", null);
         return;
       }
 
@@ -271,12 +276,17 @@ class ContactDetailsPage extends StatelessWidget {
       }
 
       // Show success dialog
-      if (context.mounted) {
-        _showMessageDialog(context, "Success", "Contact successfully added to the blacklist.");
-      }
+      _showMessageDialog(
+        context,
+        "Success",
+        "Contact successfully added to the blacklist.",
+        () {
+          Navigator.of(context).pop(true); // Close ContactDetailsPage and signal reload
+        },
+      );
     } catch (e) {
       if (context.mounted) {
-        _showMessageDialog(context, "Error", "Error adding to blacklist: $e");
+        _showMessageDialog(context, "Error", "Error adding to blacklist: $e", null);
       }
     }
   }
@@ -540,28 +550,13 @@ class ContactDetailsPage extends StatelessWidget {
       await firestore.collection('contact').doc(contactId).delete();
       print("Contact successfully deleted");
 
-      // Show success dialog
-      if (!context.mounted) {
-        print("Context is no longer mounted; cannot show success dialog.");
-        return;
-      }
 
-      await showDialog(
-        context: context,
-        builder: (BuildContext dialogContext) {
-          return AlertDialog(
-            title: const Text('Success'),
-            content: const Text('Contact deleted successfully.'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(dialogContext).pop(); // Close the dialog
-                  Navigator.of(context).pop(); // Navigate back to the previous screen
-                },
-                child: const Text('OK'),
-              ),
-            ],
-          );
+      _showMessageDialog(
+        context,
+        "Success",
+        "Contact deleted successfully.",
+        () {
+          Navigator.of(context).pop(true); // Close ContactDetailsPage and signal reload
         },
       );
     } catch (e) {
@@ -569,7 +564,7 @@ class ContactDetailsPage extends StatelessWidget {
 
       // Show error message
       if (context.mounted) {
-        _showMessageDialog(context, "Error", "Error deleting contact: $e");
+        _showMessageDialog(context, "Error", "Error deleting contact: $e", null);
       }
     }
   }
