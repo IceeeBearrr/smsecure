@@ -8,7 +8,7 @@ class BlacklistDetailsPage extends StatelessWidget {
   final String blacklistId;
   final storage = const FlutterSecureStorage();
 
-  BlacklistDetailsPage({super.key, required this.blacklistId});
+  const BlacklistDetailsPage({super.key, required this.blacklistId});
 
   Future<Map<String, dynamic>> _fetchBlacklistDetails() async {
     final firestore = FirebaseFirestore.instance;

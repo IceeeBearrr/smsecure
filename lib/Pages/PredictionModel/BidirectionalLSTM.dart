@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'package:intl/intl.dart';
 
 class BidirectionalLSTMPage extends StatefulWidget {
-  const BidirectionalLSTMPage({Key? key}) : super(key: key);
+  const BidirectionalLSTMPage({super.key});
 
   @override
   _BidirectionalLSTMPageState createState() => _BidirectionalLSTMPageState();

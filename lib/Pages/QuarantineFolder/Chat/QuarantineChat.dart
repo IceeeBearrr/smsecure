@@ -167,30 +167,30 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
           content: const SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
+              children: [
+                const Text(
                   "The confidence level indicates how certain the model is about its spam prediction.",
                   textAlign: TextAlign.justify,
                 ),
-                SizedBox(height: 10),
-                Text(
+                const SizedBox(height: 10),
+                const Text(
                   "Details:",
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-                Text(
+                const Text(
                   "- A higher value means the message is far from the decision boundary and is more confidently classified as spam.",
                   textAlign: TextAlign.justify,
                 ),
-                Text(
+                const Text(
                   "- A lower value closer to zero indicates the model is less certain and the message is near the decision boundary.",
                   textAlign: TextAlign.justify,
                 ),
-                SizedBox(height: 10),
-                Text(
+                const SizedBox(height: 10),
+                const Text(
                   "Calculation:",
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-                Text(
+                const Text(
                   "The value is derived from the SVM decision function and converted into a percentage using the sigmoid function.",
                   textAlign: TextAlign.justify,
                 ),

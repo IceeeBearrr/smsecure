@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'package:intl/intl.dart';
 
 class LinearSVMPage extends StatefulWidget {
-  const LinearSVMPage({Key? key}) : super(key: key);
+  const LinearSVMPage({super.key});
 
   @override
   _LinearSVMPageState createState() => _LinearSVMPageState();

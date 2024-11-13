@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'package:intl/intl.dart';
 
 class MultinomialNaiveBayesPage extends StatefulWidget {
-  const MultinomialNaiveBayesPage({Key? key}) : super(key: key);
+  const MultinomialNaiveBayesPage({super.key});
 
   @override
   _MultinomialNaiveBayesPageState createState() =>

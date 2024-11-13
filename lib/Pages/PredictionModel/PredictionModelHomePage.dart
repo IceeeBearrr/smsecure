@@ -165,7 +165,7 @@ class PredictionModelTile extends StatelessWidget {
   final bool isDefault;
   final VoidCallback onTap;
 
-  const PredictionModelTile({
+  const PredictionModelTile({super.key, 
     required this.modelName,
     this.isDefault = false,
     required this.onTap,
