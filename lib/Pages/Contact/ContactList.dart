@@ -8,10 +8,10 @@ class ContactList extends StatefulWidget {
   final String searchText;
 
   const ContactList({
-    Key? key,
+    super.key,
     required this.currentUserID,
     required this.searchText,
-  }) : super(key: key);
+  });
 
   @override
   _ContactListState createState() => _ContactListState();

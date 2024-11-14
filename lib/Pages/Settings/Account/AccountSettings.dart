@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:smsecure/Pages/PredictionModel/PredictionModelHomePage.dart';
-import 'package:smsecure/Pages/Settings/Account/AccountSettings.dart';
+import 'package:smsecure/Pages/Settings/Account/ChangePassword/ChangePassword.dart';
+import 'package:smsecure/Pages/Settings/Account/ForgotPasswordAccount/ForgotPassword.dart';
 
-class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key});
+
+class AccountSettingsPage extends StatelessWidget {
+  const AccountSettingsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Settings',
+          'Account Settings',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         leading: IconButton(
@@ -26,32 +27,26 @@ class SettingsPage extends StatelessWidget {
         children: [
           const SizedBox(height: 20),
           SettingsTile(
-            title: 'Account',
+            title: 'Change Password',
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const AccountSettingsPage(),
+                    builder: (context) => const ChangePassword()
                 ),
               );
             },
           ),
           const SizedBox(height: 10),
           SettingsTile(
-            title: 'Prediction Model',
+            title: 'Forgot Password',
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const PredictionModelHomePage(),
+                    builder: (context) => const Forgotpassword()
                 ),
               );
-            },
-          ),
-          const SizedBox(height: 10),
-          SettingsTile(
-            title: 'Customisation Filtering Setting',
-            onTap: () {
             },
           ),
         ],

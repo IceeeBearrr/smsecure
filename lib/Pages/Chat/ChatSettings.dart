@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:smsecure/Pages/Chat/SearchChat/SearchMessgaeChatPage.dart';
 import 'package:smsecure/Pages/Chat/Bookmark/MessageBookmark.dart';
-import 'package:smsecure/Pages/Messages/Messages.dart';
 
 class ChatSettingsPage extends StatefulWidget {
   final String conversationID;
@@ -115,6 +114,32 @@ class _ChatSettingsPageState extends State<ChatSettingsPage> {
     }
   }
 
+  Future<void> confirmBlacklist(BuildContext context) async {
+    final bool? confirmation = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Confirmation'),
+          content: const Text('Are you sure you want to blacklist this participant?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false), // Cancel action
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true), // Confirm action
+              child: const Text('Confirm'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmation == true) {
+      blacklistParticipant(); // Execute blacklist logic if confirmed
+    }
+  }
+
   Future<void> blacklistParticipant() async {
     try {
       String? currentUserPhone = await storage.read(key: "userPhone");
@@ -171,6 +196,32 @@ class _ChatSettingsPageState extends State<ChatSettingsPage> {
         "Blacklist Error",
         "Failed to blacklist participant. Please try again.",
       );
+    }
+  }
+
+  Future<void> confirmDeleteConversation(BuildContext context) async {
+    final bool? confirmation = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Confirmation'),
+          content: const Text('Are you sure you want to delete this conversation? This action cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false), // Cancel action
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true), // Confirm action
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmation == true) {
+      deleteConversation(); // Execute delete logic if confirmed
     }
   }
 
@@ -253,13 +304,7 @@ class _ChatSettingsPageState extends State<ChatSettingsPage> {
             TextButton(
             onPressed: () {
               Navigator.of(context).pop(); // Close the dialog
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const Messages(), // Navigate to Message.dart
-                ),
-                (Route<dynamic> route) => false, // Remove all previous routes
-              );
+              Navigator.of(context).popUntil((route) => route.isFirst); // Pop back to Messages
             },
               child: const Text("OK"),
             ),
@@ -375,13 +420,13 @@ class _ChatSettingsPageState extends State<ChatSettingsPage> {
                     children: [
                       SettingsTile(
                         title: 'Blacklist',
-                        onTap: blacklistParticipant,
+                        onTap: () => confirmBlacklist(context),
                         textColor: Colors.red,
                       ),
                       const SizedBox(height: 2),
                       SettingsTile(
                         title: 'Delete Conversations',
-                        onTap: deleteConversation,
+                        onTap: () => confirmDeleteConversation(context),
                         textColor: Colors.red,
                       ),
                       const SizedBox(height: 15),

@@ -450,7 +450,7 @@ class QuarantineDetailsPage extends StatelessWidget {
           'isRemoved': true,
         });
 
-        // Delete associated spamMessages sub-collection
+        // Update `isRemoved` field in the spamMessages sub-collection
         final spamMessagesQuery = await firestore
             .collection('spamContact')
             .doc(spamContactId)
@@ -458,7 +458,9 @@ class QuarantineDetailsPage extends StatelessWidget {
             .get();
 
         for (var spamMessageDoc in spamMessagesQuery.docs) {
-          await spamMessageDoc.reference.delete();
+          await spamMessageDoc.reference.update({
+            'isRemoved': true,
+          });
         }
 
         // Update `isSpam` in the contact collection

@@ -9,7 +9,8 @@ class Recentchats extends StatefulWidget {
   final String currentUserID;
   final String searchText; // Accept search input
 
-  const Recentchats({super.key, required this.currentUserID, required this.searchText});
+  const Recentchats(
+      {super.key, required this.currentUserID, required this.searchText});
 
   @override
   _RecentchatsState createState() => _RecentchatsState();
@@ -41,10 +42,11 @@ class _RecentchatsState extends State<Recentchats> {
         currentUserSmsUserID = smsUserSnapshot.docs.first.id;
       }
     }
-    
+
     // Load spam contacts with `isRemoved: false` for the current user
     if (currentUserSmsUserID != null) {
-      spamContacts = await fetchSpamContactsForCurrentUser(currentUserSmsUserID!);
+      spamContacts =
+          await fetchSpamContactsForCurrentUser(currentUserSmsUserID!);
     }
 
     // Once we have the current user's smsUserID, preload contacts
@@ -53,7 +55,8 @@ class _RecentchatsState extends State<Recentchats> {
     }
 
     setState(() {
-      isLoadingContacts = false; // Set loading to false after preloading is complete
+      isLoadingContacts =
+          false; // Set loading to false after preloading is complete
     });
   }
 
@@ -76,10 +79,15 @@ class _RecentchatsState extends State<Recentchats> {
     List<String> participantPhones = [];
 
     for (var conversation in conversationsSnapshot.docs) {
-      if (conversation.data().containsKey('smsUserID') && conversation['smsUserID'] == currentUserSmsUserID) {
-        var participants = List<String>.from(conversation['participants'] ?? []);
-        var otherUserPhone = participants.firstWhere((id) => id != widget.currentUserID, orElse: () => 'Unknown');
-        if (otherUserPhone != 'Unknown' && !contactCache.containsKey(otherUserPhone)) {
+      if (conversation.data().containsKey('smsUserID') &&
+          conversation['smsUserID'] == currentUserSmsUserID) {
+        var participants =
+            List<String>.from(conversation['participants'] ?? []);
+        var otherUserPhone = participants.firstWhere(
+            (id) => id != widget.currentUserID,
+            orElse: () => 'Unknown');
+        if (otherUserPhone != 'Unknown' &&
+            !contactCache.containsKey(otherUserPhone)) {
           participantPhones.add(otherUserPhone);
         }
       }
@@ -91,8 +99,11 @@ class _RecentchatsState extends State<Recentchats> {
     }
   }
 
-  Future<Map<String, dynamic>> fetchParticipantContact(String participantPhone) async {
-    if (currentUserSmsUserID == null) return {'name': participantPhone, 'profileImage': null};
+  Future<Map<String, dynamic>> fetchParticipantContact(
+      String participantPhone) async {
+    if (currentUserSmsUserID == null) {
+      return {'name': participantPhone, 'profileImage': null};
+    }
 
     final contactSnapshot = await FirebaseFirestore.instance
         .collection('contact')
@@ -108,13 +119,15 @@ class _RecentchatsState extends State<Recentchats> {
 
       if (profileImageUrl != null && profileImageUrl.isNotEmpty) {
         return {'name': name, 'profileImage': profileImageUrl};
-      } else if (registeredSmsUserID != null && registeredSmsUserID.isNotEmpty) {
+      } else if (registeredSmsUserID != null &&
+          registeredSmsUserID.isNotEmpty) {
         final registeredSmsUserSnapshot = await FirebaseFirestore.instance
             .collection('smsUser')
             .doc(registeredSmsUserID)
             .get();
 
-        if (registeredSmsUserSnapshot.exists && registeredSmsUserSnapshot.data()!['profileImageUrl'] != null) {
+        if (registeredSmsUserSnapshot.exists &&
+            registeredSmsUserSnapshot.data()!['profileImageUrl'] != null) {
           return {
             'name': name,
             'profileImage': registeredSmsUserSnapshot.data()!['profileImageUrl']
@@ -131,19 +144,283 @@ class _RecentchatsState extends State<Recentchats> {
     DateTime now = DateTime.now();
     DateTime yesterday = now.subtract(const Duration(days: 1));
 
-    if (DateFormat('yyyy-MM-dd').format(date) == DateFormat('yyyy-MM-dd').format(now)) {
+    if (DateFormat('yyyy-MM-dd').format(date) ==
+        DateFormat('yyyy-MM-dd').format(now)) {
       return DateFormat('HH:mm').format(date);
-    } else if (DateFormat('yyyy-MM-dd').format(date) == DateFormat('yyyy-MM-dd').format(yesterday)) {
+    } else if (DateFormat('yyyy-MM-dd').format(date) ==
+        DateFormat('yyyy-MM-dd').format(yesterday)) {
       return 'Yesterday';
     } else {
       return DateFormat('d MMM').format(date);
     }
   }
 
+  void _showOptions(BuildContext context, String conversationID, String phoneNo, String name) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text(
+                  name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+              ListTile(
+                title: const Text('View Conversation'),
+                onTap: () {
+                  Navigator.pop(context); // Close the modal
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => Chatpage(conversationID: conversationID),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                title: const Text(
+                  'Blacklist',
+                  style: TextStyle(color: Colors.red),
+                ),
+                onTap: () {
+                  Navigator.pop(context); // Close the modal
+                  _confirmBlacklist(context, phoneNo, name, conversationID);
+                },
+              ),
+              ListTile(
+                title: const Text(
+                  'Delete Conversation',
+                   style: TextStyle(color: Colors.red),
+                ),
+                onTap: () {
+                  Navigator.pop(context); // Close the modal
+                  _confirmDelete(context, conversationID);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _confirmBlacklist(BuildContext context, String phoneNo, String name, String conversationID) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Confirm Blacklist'),
+          content: Text('Are you sure you want to blacklist $name ($phoneNo)?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(), // Cancel
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(); // Close the dialog
+                _blacklistConversation(name, phoneNo, conversationID); // Perform blacklist action
+              },
+              child: const Text('Confirm'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _blacklistConversation(String name, String phoneNo, String conversationID) async {
+    try {
+      String? currentUserPhone = await storage.read(key: "userPhone");
+      if (currentUserPhone == null) throw Exception("User phone not found");
+
+      QuerySnapshot smsUserQuery = await FirebaseFirestore.instance
+          .collection('smsUser')
+          .where('phoneNo', isEqualTo: currentUserPhone)
+          .limit(1)
+          .get();
+
+      if (smsUserQuery.docs.isEmpty) {
+        throw Exception("SMS user not found");
+      }
+
+      String smsUserID = smsUserQuery.docs.first.id;
+
+      // Add to blacklist collection
+      await FirebaseFirestore.instance.collection('blacklist').add({
+        'blacklistedDateTime': Timestamp.now(),
+        'blacklistedFrom': 'Chat',
+        'name': name,
+        'phoneNo': phoneNo,
+        'smsUserID': smsUserID,
+      });
+
+      // Update contact collection
+      QuerySnapshot contactQuery = await FirebaseFirestore.instance
+          .collection('contact')
+          .where('phoneNo', isEqualTo: phoneNo)
+          .where('smsUserID', isEqualTo: smsUserID)
+          .get();
+
+      for (var doc in contactQuery.docs) {
+        await doc.reference.update({'isBlacklisted': true});
+      }
+
+      // Update conversations collection
+      await FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(conversationID)
+          .update({'isBlacklisted': true});
+
+      // Show success message
+      _showSuccessDialog(
+        context,
+        "Blacklist Success",
+        "The participant has been successfully blacklisted.",
+      );
+    } catch (e) {
+      debugPrint("Error blacklisting participant: $e");
+      _showErrorDialog(
+        context,
+        "Blacklist Error",
+        "Failed to blacklist participant. Please try again.",
+      );
+    }
+  }
+
+
+
+  void _confirmDelete(BuildContext context, String conversationID) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Confirm Delete'),
+          content: const Text('Are you sure you want to delete this conversation? This action cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(), // Cancel
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(); // Close the dialog
+                _deleteConversation(conversationID); // Perform delete action
+              },
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteConversation(String conversationID) async {
+    try {
+      // Delete messages sub-collection
+      QuerySnapshot messagesSnapshot = await FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(conversationID)
+          .collection('messages')
+          .get();
+
+      for (var messageDoc in messagesSnapshot.docs) {
+        QuerySnapshot translatedMessagesSnapshot = await messageDoc.reference
+            .collection('translatedMessages')
+            .get();
+
+        // Delete translatedMessages sub-collection
+        for (var translatedMessageDoc in translatedMessagesSnapshot.docs) {
+          await translatedMessageDoc.reference.delete();
+        }
+
+        // Delete message document
+        await messageDoc.reference.delete();
+      }
+
+      // Delete conversation document
+      await FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(conversationID)
+          .delete();
+
+      // Show success message
+      _showSuccessDialog(
+        context,
+        "Delete Success",
+        "The conversation has been successfully deleted.",
+      );
+
+    } catch (e) {
+      debugPrint("Error deleting conversation: $e");
+      _showErrorDialog(
+        context,
+        "Delete Error",
+        "Failed to delete conversation. Please try again.",
+      );
+    }
+  }
+
+  void _showErrorDialog(BuildContext context, String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog
+              },
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+
+  void _showSuccessDialog(
+      BuildContext context, String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(); 
+            },
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     if (isLoadingContacts) {
-      return const Center(child: CircularProgressIndicator()); // Show loading indicator while preloading
+      return const Center(
+          child:
+              CircularProgressIndicator()); // Show loading indicator while preloading
     }
 
     return Container(
@@ -182,11 +459,15 @@ class _RecentchatsState extends State<Recentchats> {
 
           // Filter out conversations involving spam contacts with `isRemoved: false`
           conversations = conversations.where((conversation) {
-            var participants = List<String>.from(conversation['participants'] ?? []);
-            var otherUserPhone = participants.firstWhere((id) => id != widget.currentUserID, orElse: () => '');
-            return !spamContacts.contains(otherUserPhone); // Only exclude active spam contacts
+            var participants =
+                List<String>.from(conversation['participants'] ?? []);
+            var otherUserPhone = participants.firstWhere(
+                (id) => id != widget.currentUserID,
+                orElse: () => '');
+            return !spamContacts
+                .contains(otherUserPhone); // Only exclude active spam contacts
           }).toList();
-          
+
           // Filter out blacklisted or spam conversations
           conversations = conversations.where((conversation) {
             bool isBlacklisted = conversation.get('isBlacklisted') ?? false;
@@ -195,15 +476,20 @@ class _RecentchatsState extends State<Recentchats> {
           }).toList();
 
           // Filter conversations based on search text
-            conversations = conversations.where((conversation) {
-            var participants = List<String>.from(conversation['participants'] ?? []);
-            var otherUserPhone = participants.firstWhere((id) => id != widget.currentUserID, orElse: () => '');
-            final contactDetails = contactCache[otherUserPhone] ?? {'name': otherUserPhone};
+          conversations = conversations.where((conversation) {
+            var participants =
+                List<String>.from(conversation['participants'] ?? []);
+            var otherUserPhone = participants.firstWhere(
+                (id) => id != widget.currentUserID,
+                orElse: () => '');
+            final contactDetails =
+                contactCache[otherUserPhone] ?? {'name': otherUserPhone};
 
             final name = contactDetails['name']?.toString().toLowerCase() ?? '';
             final phoneNo = otherUserPhone.toLowerCase();
 
-            return name.contains(widget.searchText) || phoneNo.contains(widget.searchText);
+            return name.contains(widget.searchText) ||
+                phoneNo.contains(widget.searchText);
           }).toList();
 
           return Column(
@@ -218,13 +504,20 @@ class _RecentchatsState extends State<Recentchats> {
                     itemCount: conversations.length,
                     itemBuilder: (context, index) {
                       var conversation = conversations[index];
-                      var participants = List<String>.from(conversation['participants'] ?? []);
-                      var otherUserPhone = participants.firstWhere((id) => id != widget.currentUserID, orElse: () => 'Unknown');
-                      var lastMessageTimeStamp = conversation['lastMessageTimeStamp'] as Timestamp?;
-                      var formattedDate = lastMessageTimeStamp != null ? formatDate(lastMessageTimeStamp) : 'Unknown';
+                      var participants =
+                          List<String>.from(conversation['participants'] ?? []);
+                      var otherUserPhone = participants.firstWhere(
+                          (id) => id != widget.currentUserID,
+                          orElse: () => 'Unknown');
+                      var lastMessageTimeStamp =
+                          conversation['lastMessageTimeStamp'] as Timestamp?;
+                      var formattedDate = lastMessageTimeStamp != null
+                          ? formatDate(lastMessageTimeStamp)
+                          : 'Unknown';
 
                       // Use preloaded contact data
-                      final contactDetails = contactCache[otherUserPhone] ?? {'name': otherUserPhone, 'profileImage': null};
+                      final contactDetails = contactCache[otherUserPhone] ??
+                          {'name': otherUserPhone, 'profileImage': null};
                       final name = contactDetails['name'];
                       final profileImageBase64 = contactDetails['profileImage'];
 
@@ -240,6 +533,11 @@ class _RecentchatsState extends State<Recentchats> {
                                 ),
                               ),
                             );
+                          },
+                          onLongPress: () {
+                            // Show options when long-pressed
+                            _showOptions(
+                                context, conversation.id, otherUserPhone, name);
                           },
                           child: SizedBox(
                             height: 65,
@@ -263,9 +561,11 @@ class _RecentchatsState extends State<Recentchats> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           name,
@@ -282,21 +582,31 @@ class _RecentchatsState extends State<Recentchats> {
                                               .collection('conversations')
                                               .doc(conversation.id)
                                               .collection('messages')
-                                              .orderBy('timestamp', descending: true)
+                                              .orderBy('timestamp',
+                                                  descending: true)
                                               .limit(1)
                                               .snapshots(),
                                           builder: (context, messageSnapshot) {
-                                            if (!messageSnapshot.hasData || messageSnapshot.data!.docs.isEmpty) {
+                                            if (!messageSnapshot.hasData ||
+                                                messageSnapshot
+                                                    .data!.docs.isEmpty) {
                                               return const Text(
                                                 "No messages yet...",
-                                                style: TextStyle(fontSize: 16, color: Colors.black54),
+                                                style: TextStyle(
+                                                    fontSize: 16,
+                                                    color: Colors.black54),
                                               );
                                             }
-                                            var latestMessage = messageSnapshot.data!.docs.first;
-                                            var messageContent = latestMessage.get('content') ?? '';
+                                            var latestMessage = messageSnapshot
+                                                .data!.docs.first;
+                                            var messageContent =
+                                                latestMessage.get('content') ??
+                                                    '';
                                             return Text(
                                               messageContent,
-                                              style: const TextStyle(fontSize: 16, color: Colors.black54),
+                                              style: const TextStyle(
+                                                  fontSize: 16,
+                                                  color: Colors.black54),
                                               overflow: TextOverflow.ellipsis,
                                               maxLines: 1,
                                             );
@@ -309,11 +619,14 @@ class _RecentchatsState extends State<Recentchats> {
                                 Padding(
                                   padding: const EdgeInsets.only(right: 10),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
                                     children: [
                                       Text(
                                         formattedDate,
-                                        style: const TextStyle(fontSize: 15, color: Colors.black54),
+                                        style: const TextStyle(
+                                            fontSize: 15,
+                                            color: Colors.black54),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       const SizedBox(height: 10),
@@ -323,11 +636,15 @@ class _RecentchatsState extends State<Recentchats> {
                                         alignment: Alignment.center,
                                         decoration: BoxDecoration(
                                           color: const Color(0xFF113953),
-                                          borderRadius: BorderRadius.circular(25),
+                                          borderRadius:
+                                              BorderRadius.circular(25),
                                         ),
                                         child: const Text(
                                           "1",
-                                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                          style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold),
                                         ),
                                       ),
                                     ],

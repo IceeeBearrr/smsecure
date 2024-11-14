@@ -12,6 +12,21 @@ String formatDetectedAt(Timestamp detectedAt) {
   return formatter.format(dateTime); // Format the DateTime
 }
 
+String advancedSanitizeText(String text) {
+  return text
+      .replaceAll('\n', ' ')
+      .replaceAll('\r', '')
+      .replaceAll('’', "'") // Replace smart quotes with regular quotes
+      .replaceAll(
+          RegExp(r'\s+'), ' ') // Replace multiple spaces with a single space
+      .trim();
+}
+
+String extractBaseTimestamp(String messageId) {
+  return messageId
+      .split('_')[0]; // Extracts the first part before the underscore
+}
+
 double sigmoid(double x) {
   return 1 / (1 + exp(-x));
 }
@@ -23,7 +38,6 @@ String formatConfidenceLevel(String rawConfidence) {
   return "${percentage.toStringAsFixed(2)}%";
 }
 
-
 class QuarantineChat extends StatefulWidget {
   final String conversationID;
 
@@ -33,13 +47,16 @@ class QuarantineChat extends StatefulWidget {
   _QuarantineChatState createState() => _QuarantineChatState();
 }
 
-class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObserver {
+class _QuarantineChatState extends State<QuarantineChat>
+    with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
   final storage = const FlutterSecureStorage();
   String? userPhone;
   String? senderPhoneNumber;
   String? smsUserID;
-  Map<String, String> spamMessagesWithKeywords = {}; // Map to store messageID -> keyword
+  bool isLoadingSpamMessages = true;
+  Map<String, String> spamMessagesWithKeywords =
+      {}; // Map to store messageID -> keyword
 
   @override
   void initState() {
@@ -55,6 +72,9 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
     super.dispose();
   }
 
+  String normalizeID(String id) {
+    return id.split('_').first; // Normalize IDs by taking the first part
+  }
 
   void _showSpamMessageDetails(Map<String, dynamic> spamDetails) {
     showDialog(
@@ -83,7 +103,8 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
                   textAlign: TextAlign.justify,
                 ),
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.center, // Ensures vertical alignment
+                  crossAxisAlignment:
+                      CrossAxisAlignment.center, // Ensures vertical alignment
                   children: [
                     Expanded(
                       child: Text.rich(
@@ -94,7 +115,8 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                             TextSpan(
-                              text: formatConfidenceLevel(spamDetails['confidenceLevel']),
+                              text: formatConfidenceLevel(
+                                  spamDetails['confidenceLevel']),
                             ),
                           ],
                         ),
@@ -102,9 +124,12 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(left: 4.0), // Adds small spacing between text and icon
+                      padding: const EdgeInsets.only(
+                          left:
+                              4.0), // Adds small spacing between text and icon
                       child: GestureDetector(
-                        onTap: _showConfidenceInfoDialog, // Opens the info dialog
+                        onTap:
+                            _showConfidenceInfoDialog, // Opens the info dialog
                         child: const Icon(
                           Icons.info_outline,
                           size: 20,
@@ -113,7 +138,6 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
                     ),
                   ],
                 ),
-
                 Text.rich(
                   TextSpan(
                     children: [
@@ -168,29 +192,29 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   "The confidence level indicates how certain the model is about its spam prediction.",
                   textAlign: TextAlign.justify,
                 ),
-                const SizedBox(height: 10),
-                const Text(
+                SizedBox(height: 10),
+                Text(
                   "Details:",
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-                const Text(
+                Text(
                   "- A higher value means the message is far from the decision boundary and is more confidently classified as spam.",
                   textAlign: TextAlign.justify,
                 ),
-                const Text(
+                Text(
                   "- A lower value closer to zero indicates the model is less certain and the message is near the decision boundary.",
                   textAlign: TextAlign.justify,
                 ),
-                const SizedBox(height: 10),
-                const Text(
+                SizedBox(height: 10),
+                Text(
                   "Calculation:",
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-                const Text(
+                Text(
                   "The value is derived from the SVM decision function and converted into a percentage using the sigmoid function.",
                   textAlign: TextAlign.justify,
                 ),
@@ -230,27 +254,33 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
       final spamContactSnapshot = await FirebaseFirestore.instance
           .collection('spamContact')
           .where('smsUserID', isEqualTo: smsUserID)
+          .where('isRemoved', isEqualTo: false)
           .get();
 
       Map<String, String> tempSpamMessagesWithKeywords = {};
 
+      print("Fetching spam messages...");
       for (var spamContactDoc in spamContactSnapshot.docs) {
         // Fetch spam messages for each spamContact
         final spamMessagesSnapshot = await FirebaseFirestore.instance
             .collection('spamContact')
             .doc(spamContactDoc.id)
             .collection('spamMessages')
+            .where('isRemoved', isEqualTo: false)
             .get();
 
-        // Add spam message IDs and keywords to the map
         for (var spamMessageDoc in spamMessagesSnapshot.docs) {
-          tempSpamMessagesWithKeywords[spamMessageDoc.id] =
+          String normalizedId = normalizeID(spamMessageDoc.id);
+          print(
+              "Spam Message ID: ${spamMessageDoc.id}, Normalized ID: $normalizedId, Keyword: ${spamMessageDoc.get('keyword')}");
+          tempSpamMessagesWithKeywords[normalizedId] =
               spamMessageDoc.get('keyword') ?? '';
         }
       }
 
       setState(() {
         spamMessagesWithKeywords = tempSpamMessagesWithKeywords;
+        isLoadingSpamMessages = false;
       });
     }
   }
@@ -258,7 +288,8 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
   // Function to highlight multiple keywords
   List<TextSpan> _getHighlightedText(String messageContent, String keywords) {
     List<TextSpan> spans = [];
-    List<String> keywordList = keywords.split(',').map((k) => k.trim()).toList();
+    List<String> keywordList =
+        keywords.split(',').map((k) => k.trim()).toList();
     int start = 0;
 
     while (start < messageContent.length) {
@@ -267,7 +298,8 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
 
       // Find the next keyword in the message
       for (String keyword in keywordList) {
-        int index = messageContent.toLowerCase().indexOf(keyword.toLowerCase(), start);
+        int index =
+            messageContent.toLowerCase().indexOf(keyword.toLowerCase(), start);
         if (index != -1 && index < nextKeywordIndex) {
           nextKeywordIndex = index;
           currentKeyword = keyword;
@@ -282,7 +314,8 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
 
       // Add the text before the keyword as a normal span
       if (nextKeywordIndex > start) {
-        spans.add(TextSpan(text: messageContent.substring(start, nextKeywordIndex)));
+        spans.add(
+            TextSpan(text: messageContent.substring(start, nextKeywordIndex)));
       }
 
       // Add the keyword as a highlighted span
@@ -303,10 +336,11 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
     return spans;
   }
 
-
-
   @override
   Widget build(BuildContext context) {
+    if (isLoadingSpamMessages) {
+      return const Center(child: CircularProgressIndicator());
+    }
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('conversations')
@@ -321,90 +355,125 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
 
         var messages = snapshot.data!.docs;
 
-        // Scroll to bottom whenever new data is loaded
-        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      // Scroll to the bottom when new data is loaded
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
         return ListView.builder(
-          controller: _scrollController,
-          itemCount: messages.length,
-          itemBuilder: (context, index) {
-            var message = messages[index];
-            var messageContent = message['content'];
-            var senderID = message['senderID'];
-            bool isSpam = spamMessagesWithKeywords.containsKey(message.id);
-            String? keyword = spamMessagesWithKeywords[message.id];
+            controller: _scrollController,
+            itemCount: messages.length,
+            itemBuilder: (context, index) {
+              var message = messages[index];
+              var messageContent = message['content'];
+              var senderID = message['senderID'];
+              String normalizedMessageId = normalizeID(message.id);
+              bool isSpam =
+                  spamMessagesWithKeywords.containsKey(normalizedMessageId);
+              String? keyword = spamMessagesWithKeywords[normalizedMessageId];
 
-            // Highlight keywords within the message
-            List<TextSpan> highlightedText = isSpam && keyword != null && keyword.isNotEmpty
-                ? _getHighlightedText(messageContent, keyword)
-                : [TextSpan(text: messageContent)];
+              // Debugging Logs
+              print(
+                  "Message ID: ${message.id}, Normalized ID: $normalizedMessageId, isSpam: $isSpam, Keyword: $keyword");
 
-            return GestureDetector(
-              onLongPress: () async {
-                if (isSpam) {
-                  // Fetch spam message details
-                  final spamContactSnapshot = await FirebaseFirestore.instance
-                      .collection('spamContact')
-                      .where('smsUserID', isEqualTo: smsUserID)
-                      .where('phoneNo', isEqualTo: senderPhoneNumber)
-                      .limit(1)
-                      .get();
+              // Highlight keywords within the message
+              List<TextSpan> highlightedText =
+                  isSpam && keyword != null && keyword.isNotEmpty
+                      ? _getHighlightedText(messageContent, keyword)
+                      : [TextSpan(text: messageContent)];
 
-                  if (spamContactSnapshot.docs.isNotEmpty) {
-                    final spamContactID = spamContactSnapshot.docs.first.id;
-                    final spamMessageSnapshot = await FirebaseFirestore.instance
-                        .collection('spamContact')
-                        .doc(spamContactID)
-                        .collection('spamMessages')
-                        .doc(message.id)
-                        .get();
+              return GestureDetector(
+                onLongPress: () async {
+                  if (isSpam) {
+                    final baseMessageTimestamp =
+                        extractBaseTimestamp(message.id);
+                    print(
+                        "Base timestamp of pressed message: $baseMessageTimestamp");
 
-                    if (spamMessageSnapshot.exists) {
-                      _showSpamMessageDetails(spamMessageSnapshot.data()!);
+                    try {
+                      final spamContactSnapshot = await FirebaseFirestore
+                          .instance
+                          .collection('spamContact')
+                          .where('smsUserID', isEqualTo: smsUserID)
+                          .where('phoneNo', isEqualTo: senderPhoneNumber)
+                          .limit(1)
+                          .get();
+
+                      if (spamContactSnapshot.docs.isNotEmpty) {
+                        final spamContactID = spamContactSnapshot.docs.first.id;
+
+                        // Fetch all spam messages and compare timestamps
+                        final spamMessagesSnapshot = await FirebaseFirestore
+                            .instance
+                            .collection('spamContact')
+                            .doc(spamContactID)
+                            .collection('spamMessages')
+                            .get();
+
+                        for (var spamDoc in spamMessagesSnapshot.docs) {
+                          final spamBaseTimestamp =
+                              extractBaseTimestamp(spamDoc.id);
+
+                          if (spamBaseTimestamp == baseMessageTimestamp) {
+                            print(
+                                "Matched spam message with ID: ${spamDoc.id}");
+                            _showSpamMessageDetails(spamDoc.data());
+                            return; // Exit once found
+                          }
+                        }
+                        print(
+                            "No matching spam message found for base timestamp: $baseMessageTimestamp");
+                      } else {
+                        print(
+                            "No spam contact found for phone number: $senderPhoneNumber");
+                      }
+                    } catch (e) {
+                      print("Error while fetching spam message details: $e");
                     }
                   }
-                }
-              },
-              child: Padding(
-                padding: senderID == userPhone
-                    ? const EdgeInsets.only(left: 80, top: 10)
-                    : const EdgeInsets.only(right: 80, top: 10),
-                child: Align(
-                  alignment: senderID == userPhone ? Alignment.centerRight : Alignment.centerLeft,
-                  child: ClipPath(
-                    clipper: senderID == userPhone
-                        ? LowerNipMessageClipper(MessageType.send)
-                        : UpperNipMessageClipper(MessageType.receive),
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: isSpam
-                            ? Colors.red
-                            : (senderID == userPhone ? const Color(0xFF113953) : const Color(0xFFE1E1E2)),
-                      ),
-                      child: RichText(
-                        text: TextSpan(
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: isSpam || senderID == userPhone ? Colors.white : Colors.black,
+                },
+                child: Padding(
+                  padding: senderID == userPhone
+                      ? const EdgeInsets.only(left: 80, top: 10)
+                      : const EdgeInsets.only(right: 80, top: 10),
+                  child: Align(
+                    alignment: senderID == userPhone
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
+                    child: ClipPath(
+                      clipper: senderID == userPhone
+                          ? LowerNipMessageClipper(MessageType.send)
+                          : UpperNipMessageClipper(MessageType.receive),
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: isSpam
+                              ? Colors.red
+                              : (senderID == userPhone
+                                  ? const Color(0xFF113953)
+                                  : const Color(0xFFE1E1E2)),
+                        ),
+                        child: RichText(
+                          text: TextSpan(
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: isSpam || senderID == userPhone
+                                  ? Colors.white
+                                  : Colors.black,
+                            ),
+                            children: highlightedText,
                           ),
-                          children: isSpam && keyword != null
-                              ? _getHighlightedText(messageContent, keyword)
-                              : [TextSpan(text: messageContent)],
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            );
-          },
-        );
+              );
+            });
       },
     );
   }
 
-  void _scrollToBottom() {
+void _scrollToBottom() {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
@@ -412,5 +481,6 @@ class _QuarantineChatState extends State<QuarantineChat> with WidgetsBindingObse
         curve: Curves.easeOut,
       );
     }
-  }
+  });
+}
 }

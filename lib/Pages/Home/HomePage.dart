@@ -23,18 +23,19 @@ class CustomSmsMessage {
   });
 }
 
-
-void _initializeSmsListener() {
+Future<void> _initializeSmsListener() async {
   smsChannel.setMethodCallHandler((call) async {
     if (call.method == "onSmsReceived") {
       try {
         // Ensure the arguments are properly formatted
-        final Map<String, dynamic> smsData = Map<String, dynamic>.from(call.arguments);
+        final Map<String, dynamic> smsData =
+            Map<String, dynamic>.from(call.arguments);
 
         // Extract SMS data
         String senderNumber = smsData["senderNumber"] ?? "Unknown";
         String messageBody = smsData["messageBody"] ?? "No Content";
-        final dateSent = smsData["dateSent"] ?? DateTime.now().millisecondsSinceEpoch;
+        final dateSent =
+            smsData["dateSent"] ?? DateTime.now().millisecondsSinceEpoch;
 
         print("Received SMS in Flutter: $messageBody from $senderNumber");
 
@@ -67,7 +68,6 @@ Future<void> handleIncomingSms(SmsMessage smsMessage) async {
   await backgroundMessageHandler(customSmsMessage);
 }
 
-
 Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
   const FlutterSecureStorage secureStorage = FlutterSecureStorage();
   final firestore = FirebaseFirestore.instance;
@@ -90,7 +90,8 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
   try {
     smsUserID = await getSmsUserID(userPhone);
     if (smsUserID == null) {
-      print("Error: smsUserID could not be retrieved for userPhone: $userPhone.");
+      print(
+          "Error: smsUserID could not be retrieved for userPhone: $userPhone.");
       return;
     }
   } catch (e) {
@@ -100,7 +101,9 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
 
   // Step 3: Format phone numbers
   String senderPhoneNumber = message.senderNumber;
-  if (!senderPhoneNumber.startsWith('+')) senderPhoneNumber = '+$senderPhoneNumber';
+  if (!senderPhoneNumber.startsWith('+')) {
+    senderPhoneNumber = '+$senderPhoneNumber';
+  }
   if (!userPhone.startsWith('+')) userPhone = '+$userPhone';
 
   print("User Phone: $userPhone");
@@ -117,7 +120,8 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
   bool isWhitelisted = whitelistSnapshot.docs.isNotEmpty;
 
   if (isWhitelisted) {
-    print("Sender is whitelisted for smsUserID: $smsUserID. Skipping spam detection.");
+    print(
+        "Sender is whitelisted for smsUserID: $smsUserID. Skipping spam detection.");
   } else {
     // Step 5: Check if sender is blacklisted for the current smsUserID
     final blacklistSnapshot = await firestore
@@ -137,13 +141,12 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
       print("Sender is blacklisted for smsUserID: $smsUserID.");
 
       // Check if the conversation exists
-      final conversationSnapshot = await firestore
-          .collection('conversations')
-          .doc(conversationID)
-          .get();
+      final conversationSnapshot =
+          await firestore.collection('conversations').doc(conversationID).get();
 
       if (!conversationSnapshot.exists) {
-        print("Creating new blacklisted conversation with ID: $conversationID.");
+        print(
+            "Creating new blacklisted conversation with ID: $conversationID.");
         await firestore.collection('conversations').doc(conversationID).set({
           'participants': participants,
           'smsUserID': smsUserID,
@@ -194,6 +197,10 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
 
       if (response.statusCode == 200) {
         final predictionResult = json.decode(response.body);
+        if (!predictionResult.containsKey('isSpam')) {
+          print("Error: Invalid API response format. Missing 'isSpam' field.");
+          return;
+        }
         bool isSpam = predictionResult['isSpam'] ?? false;
         String? keyword = predictionResult['keyword'] ?? "unknown";
         double confidenceLevel =
@@ -202,7 +209,7 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
             (predictionResult['processingTime'] ?? 0.0).toDouble();
 
         print(
-            "Is Spam: $isSpam, Keyword: $keyword, Confidence: $confidenceLevel");
+            "Debug: Spam Detection - Is Spam: $isSpam, Keyword: $keyword, Confidence Level: $confidenceLevel");
 
         if (isSpam) {
           print("Adding to spamContact collection.");
@@ -222,13 +229,15 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
                 try {
                   await doc.reference.update({'isSpam': true});
                 } catch (e) {
-                  print("Error updating isSpam field for contact: ${doc.id}, Error: $e");
+                  print(
+                      "Error updating isSpam field for contact: ${doc.id}, Error: $e");
                 }
               }
             }
 
-            senderName ??= "Unknown"; 
+            senderName ??= "Unknown";
 
+            // Step 4: Check if `spamContact` already exists
             final spamContactQuery = await firestore
                 .collection('spamContact')
                 .where('smsUserID', isEqualTo: smsUserID)
@@ -236,7 +245,22 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
                 .get();
 
             String spamContactID;
-            if (spamContactQuery.docs.isEmpty) {
+
+            if (spamContactQuery.docs.isNotEmpty) {
+              // If `spamContact` exists, update `isRemoved` to false
+              final existingDoc = spamContactQuery.docs.first;
+              spamContactID = existingDoc.id;
+
+              await firestore
+                  .collection('spamContact')
+                  .doc(spamContactID)
+                  .update({
+                'isRemoved': false,
+              });
+
+              print("Updated existing spamContact: $spamContactID");
+            } else {
+              // If no matching `spamContact`, create a new record
               final newDoc = await firestore.collection('spamContact').add({
                 'smsUserID': smsUserID,
                 'phoneNo': senderPhoneNumber,
@@ -244,11 +268,11 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
                 'isRemoved': false,
               });
               spamContactID = newDoc.id;
-            } else {
-              spamContactID = spamContactQuery.docs.first.id;
+
+              print("Created new spamContact: $spamContactID");
             }
 
-            final spamMessageID = '${message.dateSent}_$senderPhoneNumber';
+            final spamMessageID = '${message.dateSent}_${DateTime.now().millisecondsSinceEpoch}_$senderPhoneNumber';
             await firestore
                 .collection('spamContact')
                 .doc(spamContactID)
@@ -261,33 +285,37 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
               'confidenceLevel': confidenceLevel.toStringAsFixed(4),
               'detectedAt': Timestamp.now(),
               'processingTime': processingTime,
+              'isRemoved': false,
             });
 
-          await firestore.collection('conversations').doc(conversationID).set({
-            'participants': participants,
-            'smsUserID': smsUserID,
-            'lastMessageTimeStamp': Timestamp.now(),
-            'isSpam': true,
-            'isBlacklisted': false,
-          }, SetOptions(merge: true));
+            await firestore
+                .collection('conversations')
+                .doc(conversationID)
+                .set({
+              'participants': participants,
+              'smsUserID': smsUserID,
+              'lastMessageTimeStamp': Timestamp.now(),
+              'isSpam': true,
+              'isBlacklisted': false,
+            }, SetOptions(merge: true));
 
-          final messageID = '${message.dateSent}_$senderPhoneNumber';
-          await firestore
-              .collection('conversations')
-              .doc(conversationID)
-              .collection('messages')
-              .doc(messageID)
-              .set({
-            'messageID': messageID,
-            'senderID': senderPhoneNumber,
-            'content': message.messageBody,
-            'timestamp': Timestamp.fromMillisecondsSinceEpoch(message.dateSent),
-            'isIncoming': true,
-            'isBlacklisted': false,
-          }, SetOptions(merge: true));
+            final messageID = '${message.dateSent}_${DateTime.now().millisecondsSinceEpoch}_$senderPhoneNumber';
+            await firestore
+                .collection('conversations')
+                .doc(conversationID)
+                .collection('messages')
+                .doc(messageID)
+                .set({
+              'messageID': messageID,
+              'senderID': senderPhoneNumber,
+              'content': message.messageBody,
+              'timestamp':
+                  Timestamp.fromMillisecondsSinceEpoch(message.dateSent),
+              'isIncoming': true,
+              'isBlacklisted': false,
+            }, SetOptions(merge: true));
 
-          return; 
-
+            return;
           } catch (e) {
             print("Error adding to spamContact collection: $e");
           }
@@ -319,10 +347,7 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
         'isSpam': false,
       });
     } else {
-      await firestore
-          .collection('conversations')
-          .doc(conversationID)
-          .update({
+      await firestore.collection('conversations').doc(conversationID).update({
         'lastMessageTimeStamp': Timestamp.now(),
       });
     }
@@ -346,9 +371,6 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
   }
 }
 
-
-
-
 Future<String?> getSmsUserID(String userPhone) async {
   final firestore = FirebaseFirestore.instance;
 
@@ -369,7 +391,6 @@ Future<String?> getSmsUserID(String userPhone) async {
   return null;
 }
 
-
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -381,12 +402,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final Telephony telephony = Telephony.instance;
   final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
   final MethodChannel platform = const MethodChannel("com.tarumt.smsecure/sms");
+  final FirebaseFirestore firestore = FirebaseFirestore.instance;
 
   bool _permissionsGranted = false;
   bool _isLoading = true;
   Timer? pollTimer;
   String? userPhone;
   String? smsUserID;
+  int spamContactCount = 0;
+  int totalContactCount = 0;
 
   @override
   void initState() {
@@ -394,6 +418,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _initialize();
     _initializeSmsListener();
+    _fetchStats();
   }
 
   @override
@@ -405,8 +430,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _initialize() async {
     // Check if contacts and messages were already imported
-    final isContactsImported = await secureStorage.read(key: 'isContactsImported') ?? 'false';
-    final isMessagesImported = await secureStorage.read(key: 'isMessagesImported') ?? 'false';
+    final isContactsImported =
+        await secureStorage.read(key: 'isContactsImported') ?? 'false';
+    final isMessagesImported =
+        await secureStorage.read(key: 'isMessagesImported') ?? 'false';
 
     if (isContactsImported == 'true' && isMessagesImported == 'true') {
       setState(() {
@@ -425,7 +452,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // Check permissions
     bool permissionsGranted = await _checkAndRequestPermissions();
     if (!permissionsGranted) {
-      _showPermissionDialog("SMS and Contacts permissions are required to use this app.");
+      _showPermissionDialog(
+          "SMS and Contacts permissions are required to use this app.");
       return;
     }
 
@@ -445,8 +473,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       });
     }
   }
-
-
 
   void _showPermissionDialog(String message) {
     showDialog(
@@ -489,13 +515,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     setState(() {});
   }
-  
+
   Future<bool> _checkAndSetDefaultSmsAppWithLoading() async {
     try {
       print("Checking if app is the default SMS handler"); // Debugging line
-      final bool? isDefault = await platform.invokeMethod<bool?>('checkDefaultSms');
+      final bool? isDefault =
+          await platform.invokeMethod<bool?>('checkDefaultSms');
       if (isDefault != null && !isDefault) {
-        print("App is not the default SMS handler, showing dialog"); // Debugging line
+        print(
+            "App is not the default SMS handler, showing dialog"); // Debugging line
         bool userAccepted = await _showDefaultSmsDialog();
         return userAccepted;
       } else {
@@ -532,7 +560,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              _showPermissionDialog("This app needs to be set as your default SMS handler to continue.");
+              _showPermissionDialog(
+                  "This app needs to be set as your default SMS handler to continue.");
               userAccepted = false; // User did not accept
             },
             child: const Text('Cancel'),
@@ -553,11 +582,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<bool> _checkAndRequestPermissions() async {
     try {
-      bool smsPermissionGranted = await telephony.requestPhoneAndSmsPermissions ?? false;
+      bool smsPermissionGranted =
+          await telephony.requestPhoneAndSmsPermissions ?? false;
 
       if (smsPermissionGranted) {
         _permissionsGranted = true;
-        final isImported = await secureStorage.read(key: 'isMessagesImported') ?? 'false';
+        final isImported =
+            await secureStorage.read(key: 'isMessagesImported') ?? 'false';
         if (isImported != 'true') {
           await _importSmsMessages();
           await secureStorage.write(key: 'isMessagesImported', value: 'true');
@@ -566,7 +597,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       } else {
         _permissionsGranted = false;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('SMS, Phone, or Contacts permissions denied')),
+          const SnackBar(
+              content: Text('SMS, Phone, or Contacts permissions denied')),
         );
         return false;
       }
@@ -576,15 +608,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-
   Future<void> _importContactsToFirestore() async {
     // Check if contacts have already been imported
-    final isContactsImported = await secureStorage.read(key: 'isContactsImported') ?? 'false';
+    final isContactsImported =
+        await secureStorage.read(key: 'isContactsImported') ?? 'false';
     if (isContactsImported == 'true') {
       print("Contacts have already been imported to Firestore.");
       return;
     }
-
 
     if (_permissionsGranted) {
       print("Importing contacts to Firestore...");
@@ -593,7 +624,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       setState(() {
         _isLoading = true;
       });
-      
+
       // Fetch contacts and check for any issues in retrieval
       Iterable<Contact> contacts = [];
       try {
@@ -631,9 +662,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
 
       for (var contact in contacts) {
-        final contactID = FirebaseFirestore.instance.collection('contact').doc().id;
+        final contactID =
+            FirebaseFirestore.instance.collection('contact').doc().id;
         final name = contact.displayName;
-        String phoneNo = contact.phones.isNotEmpty ? contact.phones.first.number : 'No Number';
+        String phoneNo = contact.phones.isNotEmpty
+            ? contact.phones.first.number
+            : 'No Number';
         phoneNo = _formatPhoneNumber(phoneNo);
 
         String? registeredSmsUserID;
@@ -672,13 +706,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       setState(() {
         _isLoading = false;
       });
-      print("Contacts have been successfully imported and marked in secure storage.");
+      print(
+          "Contacts have been successfully imported and marked in secure storage.");
     } else {
       print("Permissions not granted for importing contacts.");
     }
   }
 
-    // Helper function to format phone numbers
+  // Helper function to format phone numbers
   String _formatPhoneNumber(String phoneNo) {
     phoneNo = phoneNo.trim();
     if (phoneNo.startsWith('0')) {
@@ -689,20 +724,31 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return phoneNo; // Return as is if it already has correct format
   }
 
-
-
   Future<void> _importSmsMessages() async {
-    final isMessagesImported = await secureStorage.read(key: 'isMessagesImported') ?? 'false';
+    final isMessagesImported =
+        await secureStorage.read(key: 'isMessagesImported') ?? 'false';
     if (isMessagesImported == 'true') return; // Skip if already imported
 
     try {
       final incomingMessages = await telephony.getInboxSms(
-        columns: [SmsColumn.ADDRESS, SmsColumn.BODY, SmsColumn.DATE_SENT, SmsColumn.DATE],
-        filter: SmsFilter.where(SmsColumn.DATE).greaterThan(DateTime(2024, 1, 1).millisecondsSinceEpoch.toString()),
+        columns: [
+          SmsColumn.ADDRESS,
+          SmsColumn.BODY,
+          SmsColumn.DATE_SENT,
+          SmsColumn.DATE
+        ],
+        filter: SmsFilter.where(SmsColumn.DATE).greaterThan(
+            DateTime(2024, 1, 1).millisecondsSinceEpoch.toString()),
       );
       final outgoingMessages = await telephony.getSentSms(
-        columns: [SmsColumn.ADDRESS, SmsColumn.BODY, SmsColumn.DATE_SENT, SmsColumn.DATE],
-        filter: SmsFilter.where(SmsColumn.DATE).greaterThan(DateTime(2024, 1, 1).millisecondsSinceEpoch.toString()),
+        columns: [
+          SmsColumn.ADDRESS,
+          SmsColumn.BODY,
+          SmsColumn.DATE_SENT,
+          SmsColumn.DATE
+        ],
+        filter: SmsFilter.where(SmsColumn.DATE).greaterThan(
+            DateTime(2024, 1, 1).millisecondsSinceEpoch.toString()),
       );
 
       for (var message in incomingMessages) {
@@ -729,7 +775,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _startPollingSentMessages();
   }
 
-
   void _startPollingSentMessages() {
     pollTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
       await _pollSentMessages();
@@ -740,8 +785,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     try {
       final lastPollTime = DateTime(2024, 1, 1);
       final sentMessages = await telephony.getSentSms(
-        columns: [SmsColumn.ADDRESS, SmsColumn.BODY, SmsColumn.DATE_SENT, SmsColumn.DATE],
-        filter: SmsFilter.where(SmsColumn.DATE).greaterThan(lastPollTime.millisecondsSinceEpoch.toString()),
+        columns: [
+          SmsColumn.ADDRESS,
+          SmsColumn.BODY,
+          SmsColumn.DATE_SENT,
+          SmsColumn.DATE
+        ],
+        filter: SmsFilter.where(SmsColumn.DATE)
+            .greaterThan(lastPollTime.millisecondsSinceEpoch.toString()),
       );
 
       for (var message in sentMessages) {
@@ -753,7 +804,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _storeSmsInFirestore(SmsMessage message, {required bool isIncoming}) async {
+  Future<void> _storeSmsInFirestore(SmsMessage message,
+      {required bool isIncoming}) async {
     try {
       final firestore = FirebaseFirestore.instance;
       final address = message.address;
@@ -766,7 +818,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       final messageID = '${message.dateSent}_$address';
 
-      final messageTimestamp = message.dateSent != null 
+      final messageTimestamp = message.dateSent != null
           ? Timestamp.fromMillisecondsSinceEpoch(message.dateSent!)
           : Timestamp.now();
 
@@ -778,29 +830,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           .get();
 
       if (!messageSnapshot.exists) {
-        await firestore.collection('conversations')
+        await firestore
+            .collection('conversations')
             .doc(conversationID)
             .collection('messages')
             .doc(messageID)
             .set({
-              'messageID': messageID,
-              'senderID': isIncoming ? address : userPhone,
-              'receiverID': isIncoming ? userPhone : address,
-              'content': message.body ?? "",
-              'timestamp': messageTimestamp,
-              'isIncoming': isIncoming,
-              'isBlacklisted': false,
-            });
-        
-        await firestore.collection('conversations')
-            .doc(conversationID)
-            .set({
-              'lastMessageTimeStamp': messageTimestamp,
-              'participants': participants,
-              'smsUserID': smsUserID ?? '',
-              'isBlacklisted': false,
-              'isSpam': false,
-            }, SetOptions(merge: true));
+          'messageID': messageID,
+          'senderID': isIncoming ? address : userPhone,
+          'receiverID': isIncoming ? userPhone : address,
+          'content': message.body ?? "",
+          'timestamp': messageTimestamp,
+          'isIncoming': isIncoming,
+          'isBlacklisted': false,
+        });
+
+        await firestore.collection('conversations').doc(conversationID).set({
+          'lastMessageTimeStamp': messageTimestamp,
+          'participants': participants,
+          'smsUserID': smsUserID ?? '',
+          'isBlacklisted': false,
+          'isSpam': false,
+        }, SetOptions(merge: true));
       }
     } catch (e, stackTrace) {
       print('Firestore error: $e');
@@ -808,10 +859,63 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _fetchStats() async {
+    try {
+      // Step 1: Retrieve userPhone
+      String? userPhone = await secureStorage.read(key: "userPhone");
+      if (userPhone == null) throw Exception("User phone not found");
+
+      // Step 2: Retrieve smsUserID
+      QuerySnapshot smsUserSnapshot = await firestore
+          .collection('smsUser')
+          .where('phoneNo', isEqualTo: userPhone)
+          .limit(1)
+          .get();
+
+      if (smsUserSnapshot.docs.isEmpty) throw Exception("smsUserID not found");
+      smsUserID = smsUserSnapshot.docs.first.id;
+
+      // Step 3: Fetch spamContact count
+      QuerySnapshot spamContactSnapshot = await firestore
+          .collection('spamContact')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .where('isRemoved', isEqualTo: false) // Only active spam contacts
+          .get();
+      spamContactCount = spamContactSnapshot.docs.length;
+
+      // Step 4: Fetch totalContact count
+      QuerySnapshot contactSnapshot = await firestore
+          .collection('contact')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .get();
+      totalContactCount = contactSnapshot.docs.length;
+
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      print("Error fetching stats: $e");
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Home")),
+      appBar: AppBar(
+        centerTitle: false, // Align the title to the start
+        title: const Text(
+          "Home",
+          style: TextStyle(
+            color: Color(0xFF113953), // Match the theme color
+            fontSize: 28, // Ensure the font size matches
+            fontWeight: FontWeight.bold, // Bold for emphasis
+          ),
+        ),
+        elevation: 0, // Flat design without shadow
+      ),
       body: _isLoading
           ? const Center(
               child: Column(
@@ -819,12 +923,228 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 10),
-                  Text("Conversations and contacts are being imported. This may take a moment."),
+                  Text(
+                    "Conversations and contacts are being imported. This may take a moment.",
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ),
             )
-          : const HomePageContent(),
+          : FutureBuilder<Map<String, dynamic>>(
+              future: _fetchDashboardStats(), // Fetch dynamic stats
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return const Center(
+                    child: Text(
+                      "Error loading data. Please try again later.",
+                      style: TextStyle(color: Colors.redAccent),
+                    ),
+                  );
+                }
+
+                final data = snapshot.data ?? {};
+                final conversationCount = data['conversationCount'] ?? 0;
+                final spamCount = data['spamCount'] ?? 0;
+
+                return FutureBuilder<String?>(
+                  future: _fetchUserName(), // Fetch user's name dynamically
+                  builder: (context, nameSnapshot) {
+                    String userName =
+                        nameSnapshot.data ?? "User"; // Default to "User"
+                    return Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 20),
+                            child: Text(
+                              "Welcome Back!",
+                              style: TextStyle(
+                                color: Color(0xFF113953),
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 30),
+                            child: Text(
+                              "Hi, $userName", // Use dynamic name
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                          _buildSpamDetectedWidget(
+                              spamCount, conversationCount),
+                          const SizedBox(height: 20),
+                          _buildSpamTrendsPlaceholder(), // Placeholder for trends
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
     );
+  }
+
+  Future<String?> _fetchUserName() async {
+    try {
+      // Retrieve userPhone from secure storage
+      final String? userPhone = await secureStorage.read(key: "userPhone");
+      if (userPhone == null) return null;
+
+      // Fetch the user's name from the smsUser collection
+      final QuerySnapshot smsUserSnapshot = await FirebaseFirestore.instance
+          .collection('smsUser')
+          .where('phoneNo', isEqualTo: userPhone)
+          .limit(1)
+          .get();
+
+      if (smsUserSnapshot.docs.isNotEmpty) {
+        return smsUserSnapshot.docs.first.get('name') ?? "User";
+      }
+      return null; // Return null if no user found
+    } catch (e) {
+      debugPrint("Error fetching user name: $e");
+      return null;
+    }
+  }
+
+  Widget _buildSpamDetectedWidget(int spamCount, int conversationCount) {
+    return Container(
+      padding: const EdgeInsets.all(20.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          const Text(
+            "Spam Detected",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 15),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              CircularProgressIndicator(
+                value:
+                    conversationCount > 0 ? spamCount / conversationCount : 0,
+                strokeWidth: 8,
+                backgroundColor: Colors.grey.shade300,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  Color(0xFF113953),
+                ),
+              ),
+              Text(
+                "$spamCount/${conversationCount > 0 ? conversationCount : 1}",
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpamTrendsPlaceholder() {
+    return Container(
+      padding: const EdgeInsets.all(20.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      height: 150,
+      alignment: Alignment.center,
+      child: const Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            "Spam Trends",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          SizedBox(height: 10),
+          Text(
+            "Chart Placeholder",
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> _fetchDashboardStats() async {
+    try {
+      final String? userPhone = await secureStorage.read(key: "userPhone");
+      if (userPhone == null) throw Exception("User phone not found");
+
+      final smsUserSnapshot = await FirebaseFirestore.instance
+          .collection('smsUser')
+          .where('phoneNo', isEqualTo: userPhone)
+          .limit(1)
+          .get();
+
+      if (smsUserSnapshot.docs.isEmpty) throw Exception("smsUserID not found");
+
+      final smsUserID = smsUserSnapshot.docs.first.id;
+
+      // Fetch the count of conversations for the smsUserID
+      final conversationSnapshot = await FirebaseFirestore.instance
+          .collection('conversations')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .get();
+
+      // Fetch the count of spam contacts detected as spam for the smsUserID
+      final spamSnapshot = await FirebaseFirestore.instance
+          .collection('spamContact')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .get();
+
+      return {
+        'conversationCount': conversationSnapshot.docs.length,
+        'spamCount': spamSnapshot.docs.length,
+      };
+    } catch (e) {
+      print("Error fetching dashboard stats: $e");
+      return {};
+    }
   }
 }
 
@@ -836,4 +1156,3 @@ class HomePageContent extends StatelessWidget {
     return const Center(child: Text("Welcome to Home Page"));
   }
 }
-

@@ -2,9 +2,14 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:smsecure/Pages/BlacklistContact/BlacklistPage.dart';
+import 'package:smsecure/Pages/QuarantineFolder/QuarantineFolderPage.dart';
+import 'package:smsecure/Pages/WhitelistContact/WhitelistPage.dart';
 
 class SideNavigationBar extends StatefulWidget {
-  const SideNavigationBar({super.key});
+  final Function(int) onMenuItemTap;
+
+  const SideNavigationBar({super.key, required this.onMenuItemTap});
 
   @override
   _SideNavigationBarState createState() => _SideNavigationBarState();
@@ -72,14 +77,14 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
               color: Color(0xFF113953), // Adjust this color as needed
             ),
           ),
-          _buildDrawerItem(Icons.home, "Home", context),
-          _buildDrawerItem(Icons.contacts, "Contacts", context),
-          _buildDrawerItem(Icons.message, "Messages", context),
-          _buildDrawerItem(Icons.person, "Profile", context),
-          _buildDrawerItem(Icons.check_circle, "Whitelisted Contacts", context),
-          _buildDrawerItem(Icons.block, "Blacklisted Contacts", context),
-          _buildDrawerItem(Icons.folder, "Quarantine Folder", context),
-          _buildDrawerItem(Icons.settings, "Customisable Filtering Settings", context),
+      _buildDrawerItem(Icons.home, "Home", context, 0),
+      _buildDrawerItem(Icons.contacts, "Contacts", context, 1),
+      _buildDrawerItem(Icons.message, "Messages", context, 2),
+      _buildDrawerItem(Icons.person, "Profile", context, 3),
+      _buildDrawerItem2(Icons.check_circle, "Whitelisted Contacts", context, const WhitelistPage()),
+      _buildDrawerItem2(Icons.block, "Blacklisted Contacts", context, const BlacklistPage()),
+      _buildDrawerItem2(Icons.folder, "Quarantine Folder", context, const QuarantineFolderPage()),
+      // _buildDrawerItem2(Icons.settings, "Customisable Filtering Settings", context, -1),
         ],
       ),
     );
@@ -105,7 +110,7 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
     }
   }
 
-  ListTile _buildDrawerItem(IconData icon, String title, BuildContext context) {
+  ListTile _buildDrawerItem(IconData icon, String title, BuildContext context, int index) {
     return ListTile(
       leading: Icon(icon, color: const Color(0xFF113953)),
       title: Text(
@@ -113,8 +118,29 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
         style: const TextStyle(fontSize: 16, color: Color.fromARGB(200, 0, 0, 0)),
       ),
       onTap: () {
-        Navigator.pop(context); // Close drawer on tap
+        Navigator.pop(context); // Close the drawer
+        if (index >= 0) {
+          widget.onMenuItemTap(index); // Notify the parent to update the index
+        }
       },
     );
   }
+
+  ListTile _buildDrawerItem2(IconData icon, String title, BuildContext context, Widget destinationPage) {
+    return ListTile(
+      leading: Icon(icon, color: const Color(0xFF113953)),
+      title: Text(
+        title,
+        style: const TextStyle(fontSize: 16, color: Color.fromARGB(200, 0, 0, 0)),
+      ),
+      onTap: () {
+        Navigator.pop(context); // Close the drawer on tap
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => destinationPage), // Navigate to the provided page
+        );
+      },
+    );
+  }
+
 }

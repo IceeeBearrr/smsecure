@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:smsecure/Pages/BlacklistContact/BlacklistPage.dart';
 import 'package:smsecure/Pages/Home/HomePage.dart';
 import 'package:smsecure/Pages/Login/CustLogin.dart';
 import 'package:smsecure/Pages/Messages/Messages.dart';
+import 'package:smsecure/Pages/QuarantineFolder/QuarantineFolderPage.dart';
+import 'package:smsecure/Pages/WhitelistContact/WhitelistPage.dart';
 import 'package:smsecure/firebase_options.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:smsecure/Pages/CustomNavigationBar.dart';
@@ -16,13 +19,13 @@ const FlutterSecureStorage secureStorage = FlutterSecureStorage();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
+
   String initialRoute = '/login';
   String? phone = await secureStorage.read(key: 'userPhone');
   if (phone != null) {
     initialRoute = '/home';
   }
-  
+
   runApp(MyApp(initialRoute: initialRoute));
 }
 
@@ -45,7 +48,12 @@ class MyApp extends StatelessWidget {
       routes: {
         '/home': (context) => const MainApp(),
         '/login': (context) => const Custlogin(),
-        '/profile' : (context) => const ProfilePage(),
+        '/profile': (context) => const ProfilePage(),
+        '/contact': (context) => const ContactPage(),
+        '/messages': (context) => const Messages(),
+        '/whitelist': (context) => const WhitelistPage(),
+        '/blacklist': (context) => const BlacklistPage(),
+        '/quarantine': (context) => const QuarantineFolderPage(),
       },
     );
   }
@@ -80,13 +88,20 @@ class MainAppState extends State<MainApp> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
-      drawer: const SideNavigationBar(), // Add the drawer here
+      drawer: SideNavigationBar(
+        onMenuItemTap: (index) {
+          setState(() {
+            _selectedIndex =
+                index; // Update the index when a drawer item is tapped
+          });
+        },
+      ),
       onDrawerChanged: (isOpen) {
         setState(() {
           _isDrawerOpen = isOpen;
         });
       },
-      appBar: AppBar(        
+      appBar: AppBar(
         actions: const [
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 15),

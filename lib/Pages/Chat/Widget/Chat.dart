@@ -206,8 +206,9 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
               leading: const Icon(Icons.info),
               title: const Text('View Message Info'),
               onTap: () {
-                if (mounted)
+                if (mounted) {
                   Navigator.pop(modalContext); // Ensure context is valid
+                }
                 showDialog(
                   context: modalContext,
                   builder: (dialogContext) => AlertDialog(
