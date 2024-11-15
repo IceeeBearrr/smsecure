@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:smsecure/Pages/Home/HomePage.dart';
 
 class SetNewPassword extends StatefulWidget {
   final String phone;
