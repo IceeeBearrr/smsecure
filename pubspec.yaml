@@ -57,6 +57,7 @@ dependencies:
   twilio_flutter: ^0.9.0
   googleapis_auth: ^1.6.0
   flutter_sticky_header: ^0.6.0
+  fl_chart: ^0.69.0
 
 dev_dependencies:
   flutter_test:

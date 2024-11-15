@@ -227,6 +227,22 @@ class _ChatSettingsPageState extends State<ChatSettingsPage> {
 
   Future<void> deleteConversation() async {
     try {
+
+      String? currentUserPhone = await storage.read(key: "userPhone");
+      if (currentUserPhone == null) throw Exception("User phone not found");
+
+      QuerySnapshot smsUserQuery = await FirebaseFirestore.instance
+          .collection('smsUser')
+          .where('phoneNo', isEqualTo: currentUserPhone)
+          .limit(1)
+          .get();
+
+      if (smsUserQuery.docs.isEmpty) {
+        throw Exception("SMS user not found");
+      }
+
+      String smsUserID = smsUserQuery.docs.first.id;
+
       // Delete messages sub-collection
       QuerySnapshot messagesSnapshot = await FirebaseFirestore.instance
           .collection('conversations')
@@ -236,7 +252,7 @@ class _ChatSettingsPageState extends State<ChatSettingsPage> {
 
       for (var messageDoc in messagesSnapshot.docs) {
         QuerySnapshot translatedMessagesSnapshot = await messageDoc.reference
-            .collection('translatedMessages')
+            .collection('translatedMessage')
             .get();
 
         // Delete translatedMessages sub-collection
@@ -253,6 +269,17 @@ class _ChatSettingsPageState extends State<ChatSettingsPage> {
           .collection('conversations')
           .doc(widget.conversationID)
           .delete();
+
+      // Delete bookmarks where conversationID and smsUserID match
+      QuerySnapshot bookmarksSnapshot = await FirebaseFirestore.instance
+          .collection('bookmarks')
+          .where('conversationID', isEqualTo: widget.conversationID)
+          .where('smsUserID', isEqualTo: smsUserID)
+          .get();
+
+      for (var bookmarkDoc in bookmarksSnapshot.docs) {
+        await bookmarkDoc.reference.delete();
+      }
 
       // Show success message
       _showSuccessDialog(

@@ -328,6 +328,7 @@ class _RecentchatsState extends State<Recentchats> {
 
   Future<void> _deleteConversation(String conversationID) async {
     try {
+
       // Delete messages sub-collection
       QuerySnapshot messagesSnapshot = await FirebaseFirestore.instance
           .collection('conversations')
@@ -337,7 +338,7 @@ class _RecentchatsState extends State<Recentchats> {
 
       for (var messageDoc in messagesSnapshot.docs) {
         QuerySnapshot translatedMessagesSnapshot = await messageDoc.reference
-            .collection('translatedMessages')
+            .collection('translatedMessage')
             .get();
 
         // Delete translatedMessages sub-collection
@@ -354,6 +355,17 @@ class _RecentchatsState extends State<Recentchats> {
           .collection('conversations')
           .doc(conversationID)
           .delete();
+
+      // Delete bookmarks where conversationID and smsUserID match
+      QuerySnapshot bookmarksSnapshot = await FirebaseFirestore.instance
+          .collection('bookmarks')
+          .where('conversationID', isEqualTo: conversationID)
+          .where('smsUserID', isEqualTo: currentUserSmsUserID)
+          .get();
+
+      for (var bookmarkDoc in bookmarksSnapshot.docs) {
+        await bookmarkDoc.reference.delete();
+      }
 
       // Show success message
       _showSuccessDialog(

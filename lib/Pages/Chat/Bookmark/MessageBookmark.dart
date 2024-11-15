@@ -22,6 +22,7 @@ class _MessageBookmarkState extends State<MessageBookmark> {
   String? participantProfileImageBase64;
   bool isLoading = true;
   String searchText = ""; // Store the current search text
+  String? smsUserID;
 
   @override
   void initState() {
@@ -75,19 +76,29 @@ class _MessageBookmarkState extends State<MessageBookmark> {
 
   Future<void> fetchUserDetails() async {
     try {
-      DocumentSnapshot userSnapshot = await FirebaseFirestore.instance
+      // Get the user's phone number from secure storage
+      userPhone = await storage.read(key: "userPhone");
+      if (userPhone == null) throw Exception("User phone not found");
+
+      // Fetch the `smsUserID` from Firestore
+      QuerySnapshot userSnapshot = await FirebaseFirestore.instance
           .collection('smsUser')
           .where('phoneNo', isEqualTo: userPhone)
-          .get()
-          .then((snapshot) => snapshot.docs.isNotEmpty
-              ? snapshot.docs.first
-              : throw Exception("User not found"));
+          .get();
 
-      Map<String, dynamic> userData =
-          userSnapshot.data() as Map<String, dynamic>;
-      userProfileImageBase64 = userData['profileImageUrl'];
+      if (userSnapshot.docs.isNotEmpty) {
+        setState(() {
+          smsUserID = userSnapshot.docs.first.id;
+          isLoading = false; // Data is ready
+        });
+      } else {
+        throw Exception("User not found in smsUser collection");
+      }
     } catch (e) {
       debugPrint("Error fetching user details: $e");
+      setState(() {
+        isLoading = false;
+      });
     }
   }
 
@@ -183,7 +194,8 @@ class _MessageBookmarkState extends State<MessageBookmark> {
                                       ),
                                       onChanged: (value) {
                                         setState(() {
-                                          searchText = value.trim().toLowerCase();
+                                          searchText =
+                                              value.trim().toLowerCase();
                                         });
                                       },
                                     ),
@@ -205,6 +217,7 @@ class _MessageBookmarkState extends State<MessageBookmark> {
                           .collection('bookmarks')
                           .where('conversationID',
                               isEqualTo: widget.conversationId)
+                          .where('smsUserID', isEqualTo: smsUserID)
                           .snapshots(),
                       builder: (context, snapshot) {
                         if (!snapshot.hasData) {
@@ -249,8 +262,8 @@ class _MessageBookmarkState extends State<MessageBookmark> {
                                     as Map<String, dynamic>;
                                 String content =
                                     messageData['content']?.toLowerCase() ?? "";
-                                    Timestamp timestamp = messageData['timestamp'] as Timestamp;
-
+                                Timestamp timestamp =
+                                    messageData['timestamp'] as Timestamp;
 
                                 if (!content.contains(searchText)) {
                                   return const SizedBox.shrink();
@@ -261,14 +274,15 @@ class _MessageBookmarkState extends State<MessageBookmark> {
 
                                 return ListTile(
                                   onTap: () {
-                                    // Navigate to Chat with initialTimestamp
+                                    print(
+                                        "Navigating to Chatpage with messageID: $messageId");
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
                                         builder: (context) => Chatpage(
                                           conversationID: widget.conversationId,
-                                          initialTimestamp:
-                                              timestamp.toDate(),
+                                          initialMessageID:
+                                              messageId, // Pass the unique message ID
                                         ),
                                       ),
                                     );
@@ -285,9 +299,9 @@ class _MessageBookmarkState extends State<MessageBookmark> {
                                             : null),
                                     backgroundColor: Colors.grey.shade200,
                                     child: (isSentByUser
-                                            ? userProfileImageBase64
-                                            : participantProfileImageBase64) ==
-                                        null
+                                                ? userProfileImageBase64
+                                                : participantProfileImageBase64) ==
+                                            null
                                         ? const Icon(
                                             Icons.person,
                                             color: Colors.grey,
@@ -295,7 +309,9 @@ class _MessageBookmarkState extends State<MessageBookmark> {
                                         : null,
                                   ),
                                   title: Text(
-                                    isSentByUser ? "You" : participantName ?? "",
+                                    isSentByUser
+                                        ? "You"
+                                        : participantName ?? "",
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                     ),

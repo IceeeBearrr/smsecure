@@ -53,7 +53,7 @@ class _QuarantineChatPageState extends State<QuarantineChatPage> {
       // Generate conversationID
       final participants = [userPhone, spamContactPhoneNo];
       participants.sort();
-      final generatedConversationID  = participants.join('_');
+      final generatedConversationID = participants.join('_');
       print("Generated conversationID: $generatedConversationID ");
 
       // Directly access the document by ID
@@ -73,7 +73,6 @@ class _QuarantineChatPageState extends State<QuarantineChatPage> {
 
       // Fetch participant details
       _loadParticipantDetails(spamContactPhoneNo);
-
     } catch (e) {
       debugPrint("Error: $e");
       setState(() {
@@ -81,7 +80,6 @@ class _QuarantineChatPageState extends State<QuarantineChatPage> {
       });
     }
   }
-
 
   Future<void> _loadParticipantDetails(String spamContactPhoneNo) async {
     final firestore = FirebaseFirestore.instance;
@@ -112,7 +110,8 @@ class _QuarantineChatPageState extends State<QuarantineChatPage> {
       }
     } else {
       setState(() {
-        participantName = spamContactPhoneNo; // Default to phone number if name is unavailable
+        participantName =
+            spamContactPhoneNo; // Default to phone number if name is unavailable
         profileImageBase64 = null;
         isLoading = false;
       });
@@ -188,9 +187,9 @@ class _QuarantineChatPageState extends State<QuarantineChatPage> {
                 Expanded(
                   child: QuarantineChat(conversationID: conversationID!),
                 ),
+                const SizedBox(height: 30.0),
               ],
             ),
     );
   }
-
 }

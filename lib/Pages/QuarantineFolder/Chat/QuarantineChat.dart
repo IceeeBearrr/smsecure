@@ -57,6 +57,7 @@ class _QuarantineChatState extends State<QuarantineChat>
   bool isLoadingSpamMessages = true;
   Map<String, String> spamMessagesWithKeywords =
       {}; // Map to store messageID -> keyword
+  int previousMessageCount = 0;
 
   @override
   void initState() {
@@ -355,8 +356,13 @@ class _QuarantineChatState extends State<QuarantineChat>
 
         var messages = snapshot.data!.docs;
 
-      // Scroll to the bottom when new data is loaded
-      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        // Trigger scroll to bottom when new messages arrive
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (messages.length != previousMessageCount) {
+            previousMessageCount = messages.length;
+            _scrollToBottom();
+          }
+        });
 
         return ListView.builder(
             controller: _scrollController,
@@ -472,15 +478,13 @@ class _QuarantineChatState extends State<QuarantineChat>
     );
   }
 
-void _scrollToBottom() {
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
-  });
-}
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        }
+      });
+    });
+  }
 }

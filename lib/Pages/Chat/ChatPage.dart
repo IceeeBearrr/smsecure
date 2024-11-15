@@ -9,12 +9,12 @@ import 'package:smsecure/Pages/Chat/ChatSettings.dart';
 
 class Chatpage extends StatefulWidget {
   final String conversationID;
-  final DateTime? initialTimestamp;
+  final String? initialMessageID;
 
   const Chatpage({
     super.key,
     required this.conversationID,
-    this.initialTimestamp,
+    this.initialMessageID,
   });
 
   @override
@@ -50,7 +50,8 @@ class _ChatpageState extends State<Chatpage> {
 
     // Get participant's phone number from the conversation
     var participants = List<String>.from(conversationSnapshot['participants']);
-    String otherUserPhone = participants.firstWhere((phone) => phone != userPhone, orElse: () => 'Unknown');
+    String otherUserPhone = participants
+        .firstWhere((phone) => phone != userPhone, orElse: () => 'Unknown');
 
     // Fetch participant's details from Firestore
     final contactSnapshot = await FirebaseFirestore.instance
@@ -70,16 +71,19 @@ class _ChatpageState extends State<Chatpage> {
           profileImageBase64 = profileImageUrl;
           isLoading = false;
         });
-      } else if (registeredSmsUserID != null && registeredSmsUserID.isNotEmpty) {
+      } else if (registeredSmsUserID != null &&
+          registeredSmsUserID.isNotEmpty) {
         final registeredSmsUserSnapshot = await FirebaseFirestore.instance
             .collection('smsUser')
             .doc(registeredSmsUserID)
             .get();
 
-        if (registeredSmsUserSnapshot.exists && registeredSmsUserSnapshot.data()!['profileImageUrl'] != null) {
+        if (registeredSmsUserSnapshot.exists &&
+            registeredSmsUserSnapshot.data()!['profileImageUrl'] != null) {
           setState(() {
             participantName = name;
-            profileImageBase64 = registeredSmsUserSnapshot.data()!['profileImageUrl'];
+            profileImageBase64 =
+                registeredSmsUserSnapshot.data()!['profileImageUrl'];
             isLoading = false;
           });
         }
@@ -92,7 +96,8 @@ class _ChatpageState extends State<Chatpage> {
       }
     } else {
       setState(() {
-        participantName = otherUserPhone; // Default to phone number if name is unavailable
+        participantName =
+            otherUserPhone; // Default to phone number if name is unavailable
         profileImageBase64 = null;
         isLoading = false;
       });
@@ -112,14 +117,14 @@ class _ChatpageState extends State<Chatpage> {
 
     if (userSnapshot.exists) {
       setState(() {
-        currentUserName = (userSnapshot.data() as Map<String, dynamic>)['name'] ?? "Unknown";
+        currentUserName =
+            (userSnapshot.data() as Map<String, dynamic>)['name'] ?? "Unknown";
       });
     }
 
     // Load participant details
     await loadParticipantDetails();
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -130,6 +135,13 @@ class _ChatpageState extends State<Chatpage> {
           padding: const EdgeInsets.only(top: 5),
           child: AppBar(
             leadingWidth: 30,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Color(0xFF113953)),
+              onPressed: () {
+                // Navigate back to the first route
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              },
+            ),
             title: Row(
               children: [
                 ClipRRect(
@@ -152,7 +164,7 @@ class _ChatpageState extends State<Chatpage> {
                 const SizedBox(width: 10),
                 Text(
                   isLoading ? "Loading..." : participantName ?? "Unknown",
-                  style: const TextStyle(            
+                  style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF113953),
@@ -182,7 +194,8 @@ class _ChatpageState extends State<Chatpage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => ChatSettingsPage(conversationID: widget.conversationID),
+                        builder: (context) => ChatSettingsPage(
+                            conversationID: widget.conversationID),
                       ),
                     );
                   },
@@ -195,14 +208,24 @@ class _ChatpageState extends State<Chatpage> {
       body: Column(
         children: [
           Expanded(
-            child: Chat(
-              conversationID: widget.conversationID,
-              initialTimestamp: widget.initialTimestamp,
+            child: Column(
+              children: [
+                Expanded(
+                  child: Chat(
+                    conversationID: widget.conversationID,
+                    initialMessageID: widget.initialMessageID,
+                  ),
+                ),
+                const SizedBox(
+                    height: 30.0
+                ), // Adds space at the bottom of the Chat widget
+              ],
             ),
           ),
           Chatbottomsheet(
             onSendMessage: (String messageContent) {
-              _sendMessage(messageContent, widget.conversationID, currentUserName);
+              _sendMessage(
+                  messageContent, widget.conversationID, currentUserName);
             },
           ),
         ],
@@ -210,7 +233,8 @@ class _ChatpageState extends State<Chatpage> {
     );
   }
 
-  Future<void> _sendMessage(String messageContent, String conversationID, String currentUserName) async {
+  Future<void> _sendMessage(String messageContent, String conversationID,
+      String currentUserName) async {
     final firestore = FirebaseFirestore.instance;
 
     // Retrieve current user's phone number from secure storage if not already loaded
@@ -222,7 +246,8 @@ class _ChatpageState extends State<Chatpage> {
     }
 
     // Fetch conversation details to determine senderID and receiverPhoneNumber
-    DocumentSnapshot conversationSnapshot = await firestore.collection('conversations').doc(conversationID).get();
+    DocumentSnapshot conversationSnapshot =
+        await firestore.collection('conversations').doc(conversationID).get();
 
     if (!conversationSnapshot.exists) {
       debugPrint("Conversation does not exist.");
@@ -230,11 +255,15 @@ class _ChatpageState extends State<Chatpage> {
     }
 
     var participants = List<String>.from(conversationSnapshot['participants']);
-    String senderID = participants.firstWhere((phone) => phone == userPhone, orElse: () => "Unknown");
-    String receiverPhoneNumber = participants.firstWhere((phone) => phone != userPhone, orElse: () => "Unknown");
+    String senderID = participants.firstWhere((phone) => phone == userPhone,
+        orElse: () => "Unknown");
+    String receiverPhoneNumber = participants
+        .firstWhere((phone) => phone != userPhone, orElse: () => "Unknown");
 
-    debugPrint("Sending message from $senderID to $receiverPhoneNumber: $messageContent");
-    final messageID = '${DateTime.now().millisecondsSinceEpoch}_$receiverPhoneNumber';
+    debugPrint(
+        "Sending message from $senderID to $receiverPhoneNumber: $messageContent");
+    final messageID =
+        '${DateTime.now().millisecondsSinceEpoch}_$receiverPhoneNumber';
 
     // Add the message to the sub-collection
     await firestore

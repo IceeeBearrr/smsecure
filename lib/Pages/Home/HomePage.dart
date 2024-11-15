@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:http/http.dart' as http;
+import 'package:fl_chart/fl_chart.dart';
 
 const MethodChannel smsChannel = MethodChannel("com.smsecure.app/sms");
 
@@ -272,7 +273,8 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
               print("Created new spamContact: $spamContactID");
             }
 
-            final spamMessageID = '${message.dateSent}_${DateTime.now().millisecondsSinceEpoch}_$senderPhoneNumber';
+            final spamMessageID =
+                '${message.dateSent}_${DateTime.now().millisecondsSinceEpoch}_$senderPhoneNumber';
             await firestore
                 .collection('spamContact')
                 .doc(spamContactID)
@@ -299,7 +301,8 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
               'isBlacklisted': false,
             }, SetOptions(merge: true));
 
-            final messageID = '${message.dateSent}_${DateTime.now().millisecondsSinceEpoch}_$senderPhoneNumber';
+            final messageID =
+                '${message.dateSent}_${DateTime.now().millisecondsSinceEpoch}_$senderPhoneNumber';
             await firestore
                 .collection('conversations')
                 .doc(conversationID)
@@ -952,6 +955,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 final data = snapshot.data ?? {};
                 final conversationCount = data['conversationCount'] ?? 0;
                 final spamCount = data['spamCount'] ?? 0;
+                final falsePositiveCount = data['falsePositiveCount'] ?? 0;
+                final falsePositiveRate = data['falsePositiveRate'] ?? 0.0;
 
                 return FutureBuilder<String?>(
                   future: _fetchUserName(), // Fetch user's name dynamically
@@ -984,10 +989,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                               ),
                             ),
                           ),
-                          _buildSpamDetectedWidget(
-                              spamCount, conversationCount),
+                          _buildDashboardWidgets(spamCount, conversationCount,
+                              falsePositiveCount, falsePositiveRate), // Updated
                           const SizedBox(height: 20),
-                          _buildSpamTrendsPlaceholder(), // Placeholder for trends
+                          _buildSpamTrendsWidget(), // Placeholder for trends
                         ],
                       ),
                     );
@@ -995,6 +1000,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 );
               },
             ),
+    );
+  }
+
+  Widget _buildDashboardWidgets(int spamCount, int conversationCount,
+      int falsePositiveCount, double falsePositiveRate) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: _buildSpamDetectedWidget(spamCount, conversationCount),
+        ),
+        const SizedBox(width: 10), // Add some spacing between widgets
+        Expanded(
+          child: _buildFalsePositiveWidget(
+              falsePositiveCount, spamCount, falsePositiveRate),
+        ),
+      ],
     );
   }
 
@@ -1071,42 +1093,42 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildSpamTrendsPlaceholder() {
-    return Container(
-      padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      height: 150,
-      alignment: Alignment.center,
-      child: const Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            "Spam Trends",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+  Widget _buildSpamTrendsWidget() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _fetchKeywordCounts(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError ||
+            snapshot.data == null ||
+            snapshot.data!.isEmpty) {
+          return const Center(
+            child: Text(
+              "No spam keyword data available.",
+              style: TextStyle(color: Colors.redAccent),
             ),
+          );
+        }
+
+        // Show the bar chart
+        return Container(
+          padding: const EdgeInsets.all(20.0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(15),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.3),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
+              ),
+            ],
           ),
-          SizedBox(height: 10),
-          Text(
-            "Chart Placeholder",
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey,
-            ),
-          ),
-        ],
-      ),
+          height: 300,
+          child: SpamKeywordBarChart(data: snapshot.data!),
+        );
+      },
     );
   }
 
@@ -1131,19 +1153,127 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           .where('smsUserID', isEqualTo: smsUserID)
           .get();
 
-      // Fetch the count of spam contacts detected as spam for the smsUserID
+      // Fetch the total number of spam contacts for the smsUserID
       final spamSnapshot = await FirebaseFirestore.instance
           .collection('spamContact')
           .where('smsUserID', isEqualTo: smsUserID)
           .get();
 
+      // Fetch the count of spam contacts where `isRemoved` is `true`
+      final falsePositiveSnapshot = await FirebaseFirestore.instance
+          .collection('spamContact')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .where('isRemoved', isEqualTo: true)
+          .get();
+
+      final spamCount = spamSnapshot.docs.length;
+      final falsePositiveCount = falsePositiveSnapshot.docs.length;
+
+      // Calculate False Positive Rate
+      final falsePositiveRate =
+          spamCount > 0 ? falsePositiveCount / spamCount : 0;
+
       return {
         'conversationCount': conversationSnapshot.docs.length,
-        'spamCount': spamSnapshot.docs.length,
+        'spamCount': spamCount,
+        'falsePositiveCount': falsePositiveCount,
+        'falsePositiveRate': falsePositiveRate,
       };
     } catch (e) {
       print("Error fetching dashboard stats: $e");
       return {};
+    }
+  }
+
+  Widget _buildFalsePositiveWidget(
+      int falsePositiveCount, int spamCount, double falsePositiveRate) {
+    return Container(
+      padding: const EdgeInsets.all(20.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "False Positives",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 15),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "$falsePositiveCount/$spamCount",
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                "${(falsePositiveRate * 100).toStringAsFixed(2)}%",
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: Color(0xFF113953),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          LinearProgressIndicator(
+            value: falsePositiveRate,
+            backgroundColor: Colors.grey.shade300,
+            valueColor: const AlwaysStoppedAnimation<Color>(
+              Color(0xFF113953),
+            ),
+            minHeight: 10,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchKeywordCounts() async {
+    try {
+      final querySnapshot = await FirebaseFirestore.instance
+          .collectionGroup('spamMessages')
+          .get();
+
+      // Count keywords
+      final Map<String, int> keywordCounts = {};
+      for (var doc in querySnapshot.docs) {
+        final keyword = doc.get('keyword') ?? 'Unknown';
+        if (keywordCounts.containsKey(keyword)) {
+          keywordCounts[keyword] = keywordCounts[keyword]! + 1;
+        } else {
+          keywordCounts[keyword] = 1;
+        }
+      }
+
+      // Convert the map to a sorted list of maps
+      final List<Map<String, dynamic>> sortedKeywords = keywordCounts.entries
+          .map((entry) => {'keyword': entry.key, 'count': entry.value})
+          .toList();
+
+      sortedKeywords
+          .sort((a, b) => b['count'].compareTo(a['count'])); // Sort descending
+
+      return sortedKeywords;
+    } catch (e) {
+      print('Error fetching keyword counts: $e');
+      return [];
     }
   }
 }
@@ -1156,3 +1286,84 @@ class HomePageContent extends StatelessWidget {
     return const Center(child: Text("Welcome to Home Page"));
   }
 }
+
+
+
+class SpamKeywordBarChart extends StatelessWidget {
+  final List<Map<String, dynamic>> data;
+
+  const SpamKeywordBarChart({required this.data, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final int maxOccurrences = data.isNotEmpty
+        ? data.map((e) => e['count']).reduce((a, b) => a > b ? a : b)
+        : 1; // Get the max count or default to 1
+    final int interval = (maxOccurrences / 5).ceil(); // Dynamic interval
+
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
+        maxY: (maxOccurrences + interval).toDouble(), // Set max Y dynamically
+        barGroups: data.map((keywordData) {
+          final index = data.indexOf(keywordData);
+          return BarChartGroupData(
+            x: index,
+            barRods: [
+              BarChartRodData(
+                toY: keywordData['count'].toDouble(),
+                color: const Color(0xFF113953),
+                width: 16,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ],
+          );
+        }).toList(),
+        titlesData: FlTitlesData(
+          leftTitles: const AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: false, // Hide left titles
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (double value, TitleMeta meta) {
+                if (value.toInt() < data.length) {
+                  return Text(
+                    data[value.toInt()]['keyword'],
+                    style: const TextStyle(fontSize: 10),
+                    textAlign: TextAlign.center,
+                  );
+                }
+                return const Text('');
+              },
+              reservedSize: 40,
+            ),
+          ),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true, // Show right titles
+              getTitlesWidget: (double value, TitleMeta meta) {
+                if (value % interval == 0) {
+                  return Text(
+                    '${value.toInt()}',
+                    style: const TextStyle(fontSize: 10),
+                    textAlign: TextAlign.center,
+                  );
+                }
+                return const Text('');
+              },
+            ),
+          ),
+        ),
+        gridData: const FlGridData(show: true),
+        borderData: FlBorderData(show: false),
+      ),
+    );
+  }
+}
+
+
+
