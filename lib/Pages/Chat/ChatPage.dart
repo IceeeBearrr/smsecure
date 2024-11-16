@@ -217,8 +217,8 @@ class _ChatpageState extends State<Chatpage> {
                   ),
                 ),
                 const SizedBox(
-                    height: 30.0
-                ), // Adds space at the bottom of the Chat widget
+                    height:
+                        30.0), // Adds space at the bottom of the Chat widget
               ],
             ),
           ),
@@ -264,6 +264,7 @@ class _ChatpageState extends State<Chatpage> {
         "Sending message from $senderID to $receiverPhoneNumber: $messageContent");
     final messageID =
         '${DateTime.now().millisecondsSinceEpoch}_$receiverPhoneNumber';
+    final timestamp = Timestamp.now();
 
     // Add the message to the sub-collection
     await firestore
@@ -272,15 +273,20 @@ class _ChatpageState extends State<Chatpage> {
         .collection('messages')
         .doc(messageID)
         .set({
-      'senderID': senderID,
-      'receiverID': receiverPhoneNumber,
       'content': messageContent,
-      'timestamp': DateTime.now(),
+      'isBlacklisted': false,
+      'isIncoming': false, // Outgoing message
+      'messageID': messageID,
+      'receiverID': receiverPhoneNumber,
+      'senderID': senderID,
+      'timestamp': timestamp,
     });
 
-    // Update the lastMessageTimeStamp in the conversation document
+    // Update the conversation's lastMessageTimeStamp and increment unreadCount for the receiver
     await firestore.collection('conversations').doc(conversationID).update({
-      'lastMessageTimeStamp': DateTime.now(),
+      'lastMessageTimeStamp': timestamp,
+      'participantData.$receiverPhoneNumber.unreadCount':
+          FieldValue.increment(1), // Increment unread count for the receiver
     });
 
     // Send the SMS to the receiver's phone number

@@ -632,124 +632,135 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
                   context, data, messageID), // Pass the messageID
               child: Padding(
                 padding: isSentByUser
-                    ? const EdgeInsets.only(left: 80, top: 10)
-                    : const EdgeInsets.only(right: 80, top: 10),
+                    ? const EdgeInsets.only(left: 20, top: 10)
+                    : const EdgeInsets.only(right: 20, top: 10),
                 child: Align(
                   alignment: isSentByUser
                       ? Alignment.centerRight
                       : Alignment.centerLeft,
-                  child: Column(
-                    crossAxisAlignment: isSentByUser
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.start,
-                    children: [
-                      ClipPath(
-                        clipper: isSentByUser
-                            ? LowerNipMessageClipper(MessageType.send)
-                            : UpperNipMessageClipper(MessageType.receive),
-                        child: StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance
-                              .collection('bookmarks')
-                              .where('messageID', isEqualTo: messageID)
-                              .where('conversationID',
-                                  isEqualTo: widget.conversationID)
-                              .snapshots(),
-                          builder: (context, snapshot) {
-                            bool isPinned = snapshot.hasData &&
-                                snapshot.data!.docs.isNotEmpty;
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.7,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: isSentByUser
+                          ? CrossAxisAlignment.end
+                          : CrossAxisAlignment.start,
+                      children: [
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: MediaQuery.of(context).size.width * 0.7,
+                          ),
+                          child: ClipPath(
+                            clipper: isSentByUser
+                                ? LowerNipMessageClipper(MessageType.send)
+                                : UpperNipMessageClipper(MessageType.receive),
+                            child: StreamBuilder<QuerySnapshot>(
+                              stream: FirebaseFirestore.instance
+                                  .collection('bookmarks')
+                                  .where('messageID', isEqualTo: messageID)
+                                  .where('conversationID',
+                                      isEqualTo: widget.conversationID)
+                                  .snapshots(),
+                              builder: (context, snapshot) {
+                                bool isPinned = snapshot.hasData &&
+                                    snapshot.data!.docs.isNotEmpty;
 
-                            return Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: isSentByUser
-                                    ? const Color(0xFF113953)
-                                    : const Color(0xFFE1E1E2),
-                                border: messageID == highlightedMessageID
-                                    ? Border.all(
-                                        color: Colors.orange,
-                                        width: 2,
-                                      )
-                                    : null, // Highlight the message
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      messageContent,
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        color: isSentByUser
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                    ),
+                                return Container(
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    color: isSentByUser
+                                        ? const Color(0xFF113953)
+                                        : const Color(0xFFE1E1E2),
+                                    border: messageID == highlightedMessageID
+                                        ? Border.all(
+                                            color: Colors.orange,
+                                            width: 2,
+                                          )
+                                        : null, // Highlight the message
                                   ),
-                                  if (isPinned)
-                                    const Padding(
-                                      padding: EdgeInsets.only(left: 8.0),
-                                      child: Icon(
-                                        Icons.push_pin,
-                                        color: Colors.orange,
-                                        size: 16,
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          messageContent,
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            color: isSentByUser
+                                                ? Colors.white
+                                                : Colors.black,
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                ],
+                                      if (isPinned)
+                                        const Padding(
+                                          padding: EdgeInsets.only(left: 8.0),
+                                          child: Icon(
+                                            Icons.push_pin,
+                                            color: Colors.orange,
+                                            size: 16,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        // Translated message displayed right below the original message
+                        StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection('conversations')
+                              .doc(widget.conversationID)
+                              .collection('messages')
+                              .doc(messageID)
+                              .collection('translatedMessage')
+                              .snapshots(),
+                          builder: (context, translatedSnapshot) {
+                            if (!translatedSnapshot.hasData ||
+                                translatedSnapshot.data!.docs.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+
+                            var translatedData =
+                                translatedSnapshot.data!.docs.first.data()
+                                    as Map<String, dynamic>;
+                            var translatedContent =
+                                translatedData['translatedContent'];
+
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSentByUser
+                                      ? const Color(0xFF0D5683)
+                                      : Colors.lightBlue.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  translatedContent,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontStyle: FontStyle.italic,
+                                    color: isSentByUser
+                                        ? Colors.white
+                                        : Colors.blue.shade900,
+                                  ),
+                                ),
                               ),
                             );
                           },
                         ),
-                      ),
-                      // Translated message displayed right below the original message
-                      StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('conversations')
-                            .doc(widget.conversationID)
-                            .collection('messages')
-                            .doc(messageID)
-                            .collection('translatedMessage')
-                            .snapshots(),
-                        builder: (context, translatedSnapshot) {
-                          if (!translatedSnapshot.hasData ||
-                              translatedSnapshot.data!.docs.isEmpty) {
-                            return const SizedBox.shrink();
-                          }
-
-                          var translatedData =
-                              translatedSnapshot.data!.docs.first.data()
-                                  as Map<String, dynamic>;
-                          var translatedContent =
-                              translatedData['translatedContent'];
-
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isSentByUser
-                                    ? const Color(0xFF0D5683)
-                                    : Colors.lightBlue.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                translatedContent,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontStyle: FontStyle.italic,
-                                  color: isSentByUser
-                                      ? Colors.white
-                                      : Colors.blue.shade900,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

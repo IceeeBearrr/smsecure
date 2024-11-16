@@ -303,34 +303,53 @@ class ContactDetailsPage extends StatelessWidget {
       return;
     }
 
-    // Check for an existing conversation
-    QuerySnapshot conversationSnapshot = await firestore
-        .collection('conversations')
-        .where('participants', arrayContainsAny: [userPhone])
+    // Retrieve the smsUserID of the current user
+    String? smsUserID;
+    final QuerySnapshot smsUserSnapshot = await firestore
+        .collection('smsUser')
+        .where('phoneNo', isEqualTo: userPhone)
+        .limit(1)
         .get();
 
-    String? conversationID;
-    for (var doc in conversationSnapshot.docs) {
-      List<dynamic> participants = doc['participants'];
-      if (participants.contains(receiverPhone) && participants.contains(userPhone)) {
-        conversationID = doc.id;
-        break;
-      }
+    if (smsUserSnapshot.docs.isNotEmpty) {
+      smsUserID = smsUserSnapshot.docs.first.id;
+    } else {
+      print("smsUserID not found for userPhone: $userPhone");
+      return;
     }
 
-    if (conversationID == null) {
-      // No conversation found, create a new one
-      DocumentReference newConversation = await firestore.collection('conversations').add({
+    // Generate a conversationID in the format of userPhone_participantPhone
+    final conversationID = "${userPhone}_$receiverPhone";
+
+    // Check for an existing conversation
+    final conversationSnapshot = await firestore.collection('conversations').doc(conversationID).get();
+
+    if (!conversationSnapshot.exists) {
+      // Create a new conversation if it doesn't exist
+      await firestore.collection('conversations').doc(conversationID).set({
         'participants': [userPhone, receiverPhone],
+        'lastMessageTimeStamp': Timestamp.now(),
+        'participantData': {
+          userPhone: {
+            'unreadCount': 0,
+            'lastReadTimestamp': Timestamp.now(),
+          },
+          receiverPhone: {
+            'unreadCount': 0,
+            'lastReadTimestamp': null,
+          },
+        },
+        'smsUserID': smsUserID, // Add the smsUserID
+        'isBlacklisted': false,
+        'isSpam': false,
       });
-      conversationID = newConversation.id;
     }
 
     // Navigate to ChatPage with the conversationID
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => Chatpage(conversationID: conversationID!),
+        builder: (context) => Chatpage(conversationID: conversationID),
       ),
     );
   }

@@ -18,6 +18,7 @@ class _WhitelistPageState extends State<WhitelistPage> {
   String? userPhone;
   String? currentSmsUserID;
   String searchText = ""; // State to store search input
+  bool dontShowAgain = false; // Tracks the "Don't show again" option
 
   @override
   void initState() {
@@ -46,7 +47,140 @@ class _WhitelistPageState extends State<WhitelistPage> {
     if (findSmsUserIDSnapshot.docs.isNotEmpty) {
       currentSmsUserID = findSmsUserIDSnapshot.docs.first.id;
       setState(() {});
+
+      // Check if the dialog should be shown
+      final dontShowDialog =
+          await secureStorage.read(key: 'dontShowImportDialog') ?? 'false';
+
+      if (dontShowDialog == 'false') {
+        _showImportContactsDialog();
+      }
     }
+  }
+
+  Future<void> _showImportContactsDialog() async {
+    bool? userChoice = await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setDialogState) {
+            return AlertDialog(
+              title: const Text("Import Contacts"),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "Do you want to import all contacts to the whitelist?",
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: dontShowAgain,
+                        onChanged: (bool? value) {
+                          setDialogState(() {
+                            dontShowAgain = value ?? false;
+                          });
+                        },
+                      ),
+                      const Text("Don't show again"),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () async {
+                    // Save "Don't show again" preference if ticked
+                    if (dontShowAgain) {
+                      await secureStorage.write(
+                          key: 'dontShowImportDialog', value: 'true');
+                    }
+                    Navigator.of(context).pop(false); // User clicked "No"
+                  },
+                  child: const Text("No"),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    // Save "Don't show again" preference if ticked
+                    if (dontShowAgain) {
+                      await secureStorage.write(
+                          key: 'dontShowImportDialog', value: 'true');
+                    }
+                    Navigator.of(context).pop(true); // User clicked "Yes"
+                  },
+                  child: const Text("Yes"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (userChoice == true) {
+      await _importAllContacts();
+    }
+  }
+
+  Future<void> _importAllContacts() async {
+    try {
+      final FirebaseFirestore firestore = FirebaseFirestore.instance;
+
+      final QuerySnapshot contactSnapshot = await firestore
+          .collection('contact')
+          .where('smsUserID', isEqualTo: currentSmsUserID)
+          .get();
+
+      WriteBatch batch = firestore.batch();
+
+      for (var doc in contactSnapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final Map<String, dynamic> whitelistEntry = {
+          'name': data['name'],
+          'phoneNo': data['phoneNo'],
+          'smsUserID': currentSmsUserID,
+        };
+
+        final whitelistRef = firestore.collection('whitelist').doc();
+        batch.set(whitelistRef, whitelistEntry);
+      }
+
+      await batch.commit();
+
+      _showMessageDialog(
+        context,
+        "Success",
+        "All contacts have been successfully imported to the whitelist.",
+      );
+    } catch (e) {
+      _showMessageDialog(
+        context,
+        "Error",
+        "Failed to import contacts: $e",
+      );
+    }
+  }
+
+  Future<void> _showMessageDialog(
+      BuildContext context, String title, String message) async {
+    return showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _navigateToAddContact() async {
@@ -119,7 +253,9 @@ class _WhitelistPageState extends State<WhitelistPage> {
                               ),
                               onChanged: (value) {
                                 setState(() {
-                                  searchText = value.trim().toLowerCase(); // Update search text
+                                  searchText = value
+                                      .trim()
+                                      .toLowerCase(); // Update search text
                                 });
                               },
                             ),
@@ -155,4 +291,3 @@ class _WhitelistPageState extends State<WhitelistPage> {
     );
   }
 }
-

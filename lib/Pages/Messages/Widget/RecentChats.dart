@@ -22,11 +22,18 @@ class _RecentchatsState extends State<Recentchats> {
   Map<String, Map<String, dynamic>> contactCache = {};
   bool isLoadingContacts = true;
   List<String> spamContacts = []; // List to store spam contacts
+  String? currentUserPhone;
 
   @override
   void initState() {
     super.initState();
     loadCurrentUserSmsUserID();
+    loadCurrentUserPhone();
+  }
+
+  Future<void> loadCurrentUserPhone() async {
+    currentUserPhone = await storage.read(key: "userPhone");
+    setState(() {}); // Trigger rebuild after loading
   }
 
   Future<void> loadCurrentUserSmsUserID() async {
@@ -155,7 +162,8 @@ class _RecentchatsState extends State<Recentchats> {
     }
   }
 
-  void _showOptions(BuildContext context, String conversationID, String phoneNo, String name) {
+  void _showOptions(BuildContext context, String conversationID, String phoneNo,
+      String name) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -183,7 +191,8 @@ class _RecentchatsState extends State<Recentchats> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => Chatpage(conversationID: conversationID),
+                      builder: (context) =>
+                          Chatpage(conversationID: conversationID),
                     ),
                   );
                 },
@@ -201,7 +210,7 @@ class _RecentchatsState extends State<Recentchats> {
               ListTile(
                 title: const Text(
                   'Delete Conversation',
-                   style: TextStyle(color: Colors.red),
+                  style: TextStyle(color: Colors.red),
                 ),
                 onTap: () {
                   Navigator.pop(context); // Close the modal
@@ -215,7 +224,8 @@ class _RecentchatsState extends State<Recentchats> {
     );
   }
 
-  void _confirmBlacklist(BuildContext context, String phoneNo, String name, String conversationID) {
+  void _confirmBlacklist(BuildContext context, String phoneNo, String name,
+      String conversationID) {
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
@@ -230,7 +240,8 @@ class _RecentchatsState extends State<Recentchats> {
             TextButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop(); // Close the dialog
-                _blacklistConversation(name, phoneNo, conversationID); // Perform blacklist action
+                _blacklistConversation(
+                    name, phoneNo, conversationID); // Perform blacklist action
               },
               child: const Text('Confirm'),
             ),
@@ -240,7 +251,8 @@ class _RecentchatsState extends State<Recentchats> {
     );
   }
 
-  Future<void> _blacklistConversation(String name, String phoneNo, String conversationID) async {
+  Future<void> _blacklistConversation(
+      String name, String phoneNo, String conversationID) async {
     try {
       String? currentUserPhone = await storage.read(key: "userPhone");
       if (currentUserPhone == null) throw Exception("User phone not found");
@@ -299,15 +311,14 @@ class _RecentchatsState extends State<Recentchats> {
     }
   }
 
-
-
   void _confirmDelete(BuildContext context, String conversationID) {
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('Confirm Delete'),
-          content: const Text('Are you sure you want to delete this conversation? This action cannot be undone.'),
+          content: const Text(
+              'Are you sure you want to delete this conversation? This action cannot be undone.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(), // Cancel
@@ -328,7 +339,6 @@ class _RecentchatsState extends State<Recentchats> {
 
   Future<void> _deleteConversation(String conversationID) async {
     try {
-
       // Delete messages sub-collection
       QuerySnapshot messagesSnapshot = await FirebaseFirestore.instance
           .collection('conversations')
@@ -337,9 +347,8 @@ class _RecentchatsState extends State<Recentchats> {
           .get();
 
       for (var messageDoc in messagesSnapshot.docs) {
-        QuerySnapshot translatedMessagesSnapshot = await messageDoc.reference
-            .collection('translatedMessage')
-            .get();
+        QuerySnapshot translatedMessagesSnapshot =
+            await messageDoc.reference.collection('translatedMessage').get();
 
         // Delete translatedMessages sub-collection
         for (var translatedMessageDoc in translatedMessagesSnapshot.docs) {
@@ -373,7 +382,6 @@ class _RecentchatsState extends State<Recentchats> {
         "Delete Success",
         "The conversation has been successfully deleted.",
       );
-
     } catch (e) {
       debugPrint("Error deleting conversation: $e");
       _showErrorDialog(
@@ -404,9 +412,7 @@ class _RecentchatsState extends State<Recentchats> {
     );
   }
 
-
-  void _showSuccessDialog(
-      BuildContext context, String title, String message) {
+  void _showSuccessDialog(BuildContext context, String title, String message) {
     showDialog(
       context: context,
       builder: (context) {
@@ -415,9 +421,9 @@ class _RecentchatsState extends State<Recentchats> {
           content: Text(message),
           actions: [
             TextButton(
-            onPressed: () {
-              Navigator.of(context).pop(); 
-            },
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
               child: const Text("OK"),
             ),
           ],
@@ -426,6 +432,35 @@ class _RecentchatsState extends State<Recentchats> {
     );
   }
 
+  Future<List<QueryDocumentSnapshot>> fetchFilteredConversations() async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('conversations')
+        .orderBy('lastMessageTimeStamp', descending: true)
+        .get();
+
+    List<QueryDocumentSnapshot> filteredConversations = [];
+
+    for (var conversation in snapshot.docs) {
+      var messagesSnapshot = await FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(conversation.id)
+          .collection('messages')
+          .get();
+
+      if (messagesSnapshot.docs.isNotEmpty) {
+        filteredConversations.add(conversation);
+      }
+    }
+
+    // Further filtering logic (spam, blacklist, search) can go here
+    filteredConversations = filteredConversations.where((conversation) {
+      bool isBlacklisted = conversation.get('isBlacklisted') ?? false;
+      bool isSpam = conversation.get('isSpam') ?? false;
+      return !isBlacklisted && !isSpam;
+    }).toList();
+
+    return filteredConversations;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -453,24 +488,21 @@ class _RecentchatsState extends State<Recentchats> {
           ),
         ],
       ),
-      child: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('conversations')
-            .orderBy('lastMessageTimeStamp', descending: true)
-            .snapshots(),
+      child: FutureBuilder<List<QueryDocumentSnapshot>>(
+        future: fetchFilteredConversations(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return const Center(child: Text("No conversations available"));
           }
 
-          var conversations = snapshot.data!.docs;
+          var filteredConversations = snapshot.data!;
 
           // Filter out conversations involving spam contacts with `isRemoved: false`
-          conversations = conversations.where((conversation) {
+          filteredConversations = filteredConversations.where((conversation) {
             var participants =
                 List<String>.from(conversation['participants'] ?? []);
             var otherUserPhone = participants.firstWhere(
@@ -481,14 +513,14 @@ class _RecentchatsState extends State<Recentchats> {
           }).toList();
 
           // Filter out blacklisted or spam conversations
-          conversations = conversations.where((conversation) {
+          filteredConversations = filteredConversations.where((conversation) {
             bool isBlacklisted = conversation.get('isBlacklisted') ?? false;
             bool isSpam = conversation.get('isSpam') ?? false;
             return !isBlacklisted && !isSpam;
           }).toList();
 
           // Filter conversations based on search text
-          conversations = conversations.where((conversation) {
+          filteredConversations = filteredConversations.where((conversation) {
             var participants =
                 List<String>.from(conversation['participants'] ?? []);
             var otherUserPhone = participants.firstWhere(
@@ -513,9 +545,9 @@ class _RecentchatsState extends State<Recentchats> {
                   radius: const Radius.circular(8),
                   child: ListView.builder(
                     shrinkWrap: true,
-                    itemCount: conversations.length,
+                    itemCount: filteredConversations.length,
                     itemBuilder: (context, index) {
-                      var conversation = conversations[index];
+                      var conversation = filteredConversations[index];
                       var participants =
                           List<String>.from(conversation['participants'] ?? []);
                       var otherUserPhone = participants.firstWhere(
@@ -642,23 +674,68 @@ class _RecentchatsState extends State<Recentchats> {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       const SizedBox(height: 10),
-                                      Container(
-                                        height: 23,
-                                        width: 23,
-                                        alignment: Alignment.center,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF113953),
-                                          borderRadius:
-                                              BorderRadius.circular(25),
-                                        ),
-                                        child: const Text(
-                                          "1",
-                                          style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold),
-                                        ),
-                                      ),
+                                      // Ensure currentUserPhone is loaded before proceeding
+                                      currentUserPhone == null
+                                          ? Container() // Show nothing while loading
+                                          : StreamBuilder<DocumentSnapshot>(
+                                              stream: FirebaseFirestore.instance
+                                                  .collection('conversations')
+                                                  .doc(conversation.id)
+                                                  .snapshots(),
+                                              builder: (context, snapshot) {
+                                                if (!snapshot.hasData ||
+                                                    snapshot.data == null) {
+                                                  return Container(); // Return an empty container if no data
+                                                }
+
+                                                var conversationData =
+                                                    snapshot.data!.data()
+                                                        as Map<String, dynamic>;
+                                                var participantData =
+                                                    conversationData[
+                                                            'participantData'] ??
+                                                        {};
+
+                                                int unreadCount = 0;
+
+                                                if (participantData[
+                                                        currentUserPhone] !=
+                                                    null) {
+                                                  unreadCount = participantData[
+                                                              currentUserPhone]
+                                                          ['unreadCount'] ??
+                                                      0;
+                                                }
+
+                                                return unreadCount > 0
+                                                    ? Container(
+                                                        height: 23,
+                                                        width: 23,
+                                                        alignment:
+                                                            Alignment.center,
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: const Color(
+                                                              0xFF113953),
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(25),
+                                                        ),
+                                                        child: Text(
+                                                          unreadCount
+                                                              .toString(),
+                                                          style:
+                                                              const TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 16,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      )
+                                                    : Container(); // Return an empty container if no unread count
+                                              },
+                                            ),
                                     ],
                                   ),
                                 ),

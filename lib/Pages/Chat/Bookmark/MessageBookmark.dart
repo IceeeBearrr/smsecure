@@ -76,29 +76,21 @@ class _MessageBookmarkState extends State<MessageBookmark> {
 
   Future<void> fetchUserDetails() async {
     try {
-      // Get the user's phone number from secure storage
-      userPhone = await storage.read(key: "userPhone");
-      if (userPhone == null) throw Exception("User phone not found");
-
-      // Fetch the `smsUserID` from Firestore
       QuerySnapshot userSnapshot = await FirebaseFirestore.instance
           .collection('smsUser')
           .where('phoneNo', isEqualTo: userPhone)
           .get();
 
       if (userSnapshot.docs.isNotEmpty) {
-        setState(() {
-          smsUserID = userSnapshot.docs.first.id;
-          isLoading = false; // Data is ready
-        });
+        Map<String, dynamic> userData =
+            userSnapshot.docs.first.data() as Map<String, dynamic>;
+        userProfileImageBase64 = userData['profileImageUrl'];
+        debugPrint("User profile image URL fetched: $userProfileImageBase64");
       } else {
-        throw Exception("User not found in smsUser collection");
+        debugPrint("User details not found in smsUser collection.");
       }
     } catch (e) {
       debugPrint("Error fetching user details: $e");
-      setState(() {
-        isLoading = false;
-      });
     }
   }
 
@@ -110,13 +102,13 @@ class _MessageBookmarkState extends State<MessageBookmark> {
           .get();
 
       if (contactSnapshot.docs.isNotEmpty) {
-        // If contact exists
         Map<String, dynamic> contactData =
             contactSnapshot.docs.first.data() as Map<String, dynamic>;
         participantName = contactData['name'] ?? participantPhoneNo;
         participantProfileImageBase64 = contactData['profileImageUrl'];
+        debugPrint(
+            "Participant profile image URL fetched from contact: $participantProfileImageBase64");
       } else {
-        // Fallback to 'smsUser' collection
         DocumentSnapshot smsUserSnapshot = await FirebaseFirestore.instance
             .collection('smsUser')
             .doc(participantPhoneNo)
@@ -127,6 +119,8 @@ class _MessageBookmarkState extends State<MessageBookmark> {
               smsUserSnapshot.data() as Map<String, dynamic>;
           participantName = smsUserData['name'] ?? participantPhoneNo;
           participantProfileImageBase64 = smsUserData['profileImageUrl'];
+          debugPrint(
+              "Participant profile image URL fetched from smsUser: $participantProfileImageBase64");
         }
       }
     } catch (e) {
@@ -290,12 +284,20 @@ class _MessageBookmarkState extends State<MessageBookmark> {
                                   leading: CircleAvatar(
                                     backgroundImage: isSentByUser
                                         ? (userProfileImageBase64 != null
-                                            ? MemoryImage(base64Decode(
-                                                userProfileImageBase64!))
+                                            ? (userProfileImageBase64!
+                                                    .startsWith('http')
+                                                ? NetworkImage(
+                                                    userProfileImageBase64!)
+                                                : MemoryImage(base64Decode(
+                                                    userProfileImageBase64!)))
                                             : null)
                                         : (participantProfileImageBase64 != null
-                                            ? MemoryImage(base64Decode(
-                                                participantProfileImageBase64!))
+                                            ? (participantProfileImageBase64!
+                                                    .startsWith('http')
+                                                ? NetworkImage(
+                                                    participantProfileImageBase64!)
+                                                : MemoryImage(base64Decode(
+                                                    participantProfileImageBase64!)))
                                             : null),
                                     backgroundColor: Colors.grey.shade200,
                                     child: (isSentByUser

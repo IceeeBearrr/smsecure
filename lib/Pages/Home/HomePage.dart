@@ -100,6 +100,22 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
     return;
   }
 
+  // Step 3: Retrieve chosenPredictionModel from smsUser collection
+  String chosenPredictionModel = 'Bidirectional LSTM'; // Fallback value
+  try {
+    DocumentSnapshot smsUserDoc =
+        await firestore.collection('smsUser').doc(smsUserID).get();
+    if (smsUserDoc.exists) {
+      chosenPredictionModel =
+          smsUserDoc.get('selectedModel') ?? 'Bidirectional LSTM'; // Retrieve field
+    } else {
+      print("Error: smsUser document does not exist for smsUserID: $smsUserID.");
+    }
+  } catch (e) {
+    print("Error retrieving chosenPredictionModel: $e");
+  }
+
+
   // Step 3: Format phone numbers
   String senderPhoneNumber = message.senderNumber;
   if (!senderPhoneNumber.startsWith('+')) {
@@ -152,6 +168,16 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
           'participants': participants,
           'smsUserID': smsUserID,
           'lastMessageTimeStamp': Timestamp.now(),
+          'participantData': {
+            userPhone: {
+              'unreadCount': FieldValue.increment(1),
+              'lastReadTimestamp': null,
+            },
+            senderPhoneNumber: {
+              'unreadCount': 0,
+              'lastReadTimestamp': Timestamp.now(),
+            },
+          },
           'isBlacklisted': true,
           'isSpam': false,
         });
@@ -185,6 +211,7 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
     final predictionRequest = {
       'message': message.messageBody,
       'senderPhone': senderPhoneNumber,
+      'chosenPredictionModel': chosenPredictionModel,
     };
 
     try {
@@ -297,6 +324,16 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
               'participants': participants,
               'smsUserID': smsUserID,
               'lastMessageTimeStamp': Timestamp.now(),
+              'participantData': {
+                userPhone: {
+                  'unreadCount': FieldValue.increment(1),
+                  'lastReadTimestamp': null,
+                },
+                senderPhoneNumber: {
+                  'unreadCount': 0,
+                  'lastReadTimestamp': Timestamp.now(),
+                },
+              },
               'isSpam': true,
               'isBlacklisted': false,
             }, SetOptions(merge: true));
@@ -346,6 +383,16 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
         'participants': participants,
         'smsUserID': smsUserID,
         'lastMessageTimeStamp': Timestamp.now(),
+        'participantData': {
+          userPhone: {
+            'unreadCount': FieldValue.increment(1),
+            'lastReadTimestamp': null,
+          },
+          senderPhoneNumber: {
+            'unreadCount': 0,
+            'lastReadTimestamp': Timestamp.now(),
+          },
+        },
         'isBlacklisted': false,
         'isSpam': false,
       });
@@ -851,6 +898,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         await firestore.collection('conversations').doc(conversationID).set({
           'lastMessageTimeStamp': messageTimestamp,
           'participants': participants,
+          'participantData': {
+            userPhone: {
+              'lastReadTimestamp': isIncoming ? Timestamp.now() : null,
+              'unreadCount': isIncoming ? FieldValue.increment(1) : 0,
+            },
+            address: {
+              'lastReadTimestamp': !isIncoming ? Timestamp.now() : null,
+              'unreadCount': !isIncoming ? FieldValue.increment(1) : 0,
+            },
+          },
           'smsUserID': smsUserID ?? '',
           'isBlacklisted': false,
           'isSpam': false,
@@ -1044,75 +1101,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Widget _buildSpamDetectedWidget(int spamCount, int conversationCount) {
-    return Container(
-      padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          const Text(
-            "Spam Detected",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 15),
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              CircularProgressIndicator(
-                value:
-                    conversationCount > 0 ? spamCount / conversationCount : 0,
-                strokeWidth: 8,
-                backgroundColor: Colors.grey.shade300,
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                  Color(0xFF113953),
-                ),
+    return GestureDetector(
+      onLongPress: () {
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text("Spam Detected"),
+              content: const Text(
+                "Spam Detected represents the total spam messages detected in conversations made.",
+                textAlign: TextAlign.justify,
               ),
-              Text(
-                "$spamCount/${conversationCount > 0 ? conversationCount : 1}",
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text("Close"),
                 ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSpamTrendsWidget() {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _fetchKeywordCounts(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError ||
-            snapshot.data == null ||
-            snapshot.data!.isEmpty) {
-          return const Center(
-            child: Text(
-              "No spam keyword data available.",
-              style: TextStyle(color: Colors.redAccent),
-            ),
-          );
-        }
-
-        // Show the bar chart
-        return Container(
+              ],
+            );
+          },
+        );
+      },
+      child: SizedBox(
+        height: 127,
+        child: Container(
           padding: const EdgeInsets.all(20.0),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -1125,10 +1137,103 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
             ],
           ),
-          height: 300,
-          child: SpamKeywordBarChart(data: snapshot.data!),
+          child: Column(
+            children: [
+              const Text(
+                "Spam Detected",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 15),
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    value: conversationCount > 0
+                        ? spamCount / conversationCount
+                        : 0,
+                    strokeWidth: 8,
+                    backgroundColor: Colors.grey.shade300,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Color(0xFF113953),
+                    ),
+                  ),
+                  Text(
+                    "$spamCount/${conversationCount > 0 ? conversationCount : 1}",
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSpamTrendsWidget() {
+    return GestureDetector(
+      onLongPress: () {
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text("Spam Trends"),
+              content: const Text(
+                "Spam Trends shows the top keywords in spam messages to help foster user awareness.",
+                textAlign: TextAlign.justify,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text("Close"),
+                ),
+              ],
+            );
+          },
         );
       },
+      child: FutureBuilder<List<Map<String, dynamic>>>(
+        future: _fetchKeywordCounts(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError ||
+              snapshot.data == null ||
+              snapshot.data!.isEmpty) {
+            return const Center(
+              child: Text(
+                "No spam keyword data available.",
+                style: TextStyle(color: Colors.redAccent),
+              ),
+            );
+          }
+
+          // Show the bar chart
+          return Container(
+            padding: const EdgeInsets.all(20.0),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(15),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.3),
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            height: 300,
+            child: SpamKeywordBarChart(data: snapshot.data!),
+          );
+        },
+      ),
     );
   }
 
@@ -1187,60 +1292,82 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _buildFalsePositiveWidget(
       int falsePositiveCount, int spamCount, double falsePositiveRate) {
-    return Container(
-      padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "False Positives",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 15),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "$falsePositiveCount/$spamCount",
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+    return GestureDetector(
+      onLongPress: () {
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text("False Positives"),
+              content: const Text(
+                "False Positives represent spam messages removed by the user from the quarantine folder.",
+                textAlign: TextAlign.justify,
               ),
-              Text(
-                "${(falsePositiveRate * 100).toStringAsFixed(2)}%",
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFF113953),
-                  fontWeight: FontWeight.bold,
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text("Close"),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          LinearProgressIndicator(
-            value: falsePositiveRate,
-            backgroundColor: Colors.grey.shade300,
-            valueColor: const AlwaysStoppedAnimation<Color>(
-              Color(0xFF113953),
+              ],
+            );
+          },
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20.0),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
             ),
-            minHeight: 10,
-          ),
-        ],
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "False Positives",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 15),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "$falsePositiveCount/$spamCount",
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  "${(falsePositiveRate * 100).toStringAsFixed(2)}%",
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: Color(0xFF113953),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            LinearProgressIndicator(
+              value: falsePositiveRate,
+              backgroundColor: Colors.grey.shade300,
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                Color(0xFF113953),
+              ),
+              minHeight: 10,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1251,16 +1378,38 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           .collectionGroup('spamMessages')
           .get();
 
-      // Count keywords
+      print(
+          "Fetched ${querySnapshot.docs.length} spamMessages documents"); // Debugging log
+
+      // Count individual keywords
       final Map<String, int> keywordCounts = {};
       for (var doc in querySnapshot.docs) {
-        final keyword = doc.get('keyword') ?? 'Unknown';
-        if (keywordCounts.containsKey(keyword)) {
-          keywordCounts[keyword] = keywordCounts[keyword]! + 1;
+        print("Processing document: ${doc.id}"); // Debugging log
+        final dynamic keywordField = doc.get('keyword');
+
+        // Handle both String and List<dynamic> types
+        List<String> keywords;
+        if (keywordField is String) {
+          keywords = keywordField
+              .split(',')
+              .map((keyword) => keyword.trim()) // Trim extra spaces
+              .toList();
+        } else if (keywordField is List<dynamic>) {
+          keywords = keywordField.map((e) => e.toString().trim()).toList();
         } else {
-          keywordCounts[keyword] = 1;
+          print(
+              "Skipping invalid keyword field in document: ${doc.id}"); // Debugging log
+          continue;
+        }
+
+        for (var keyword in keywords) {
+          if (keyword.isNotEmpty) {
+            keywordCounts[keyword] = (keywordCounts[keyword] ?? 0) + 1;
+          }
         }
       }
+
+      print("Keyword counts: $keywordCounts"); // Debugging log
 
       // Convert the map to a sorted list of maps
       final List<Map<String, dynamic>> sortedKeywords = keywordCounts.entries
@@ -1286,8 +1435,6 @@ class HomePageContent extends StatelessWidget {
     return const Center(child: Text("Welcome to Home Page"));
   }
 }
-
-
 
 class SpamKeywordBarChart extends StatelessWidget {
   final List<Map<String, dynamic>> data;
@@ -1341,7 +1488,8 @@ class SpamKeywordBarChart extends StatelessWidget {
               reservedSize: 40,
             ),
           ),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true, // Show right titles
@@ -1364,6 +1512,3 @@ class SpamKeywordBarChart extends StatelessWidget {
     );
   }
 }
-
-
-

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:smsecure/Pages/BlacklistContact/BlacklistPage.dart';
+import 'package:smsecure/Pages/CustomisableFilteringSetting/CustomisableFilteringHomePage.dart';
 import 'package:smsecure/Pages/QuarantineFolder/QuarantineFolderPage.dart';
 import 'package:smsecure/Pages/WhitelistContact/WhitelistPage.dart';
 
@@ -84,7 +85,7 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
       _buildDrawerItem2(Icons.check_circle, "Whitelisted Contacts", context, const WhitelistPage()),
       _buildDrawerItem2(Icons.block, "Blacklisted Contacts", context, const BlacklistPage()),
       _buildDrawerItem2(Icons.folder, "Quarantine Folder", context, const QuarantineFolderPage()),
-      // _buildDrawerItem2(Icons.settings, "Customisable Filtering Settings", context, -1),
+      _buildDrawerItem2(Icons.settings, "Customisable Filtering Settings", context, const CustomisableFilteringHomePage()),
         ],
       ),
     );

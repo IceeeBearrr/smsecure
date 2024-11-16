@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:smsecure/Pages/CustomisableFilteringSetting/CustomisableFilteringHomePage.dart';
 import 'package:smsecure/Pages/PredictionModel/PredictionModelHomePage.dart';
 import 'package:smsecure/Pages/Settings/Account/AccountSettings.dart';
 
@@ -52,6 +53,12 @@ class SettingsPage extends StatelessWidget {
           SettingsTile(
             title: 'Customisation Filtering Setting',
             onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CustomisableFilteringHomePage(),
+                ),
+              );
             },
           ),
         ],
