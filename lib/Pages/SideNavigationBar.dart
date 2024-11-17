@@ -67,25 +67,31 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
               ),
             ),
             accountEmail: null,
-            currentAccountPicture: profileImageUrl != null && profileImageUrl!.isNotEmpty
+            currentAccountPicture: profileImageUrl != null &&
+                    profileImageUrl!.isNotEmpty
                 ? _buildProfileImage(profileImageUrl!)
                 : CircleAvatar(
                     radius: 50,
                     backgroundColor: Colors.grey[300],
-                    child: const Icon(Icons.person, size: 60, color: Colors.white),
+                    child:
+                        const Icon(Icons.person, size: 60, color: Colors.white),
                   ),
             decoration: const BoxDecoration(
               color: Color(0xFF113953), // Adjust this color as needed
             ),
           ),
-      _buildDrawerItem(Icons.home, "Home", context, 0),
-      _buildDrawerItem(Icons.contacts, "Contacts", context, 1),
-      _buildDrawerItem(Icons.message, "Messages", context, 2),
-      _buildDrawerItem(Icons.person, "Profile", context, 3),
-      _buildDrawerItem2(Icons.check_circle, "Whitelisted Contacts", context, const WhitelistPage()),
-      _buildDrawerItem2(Icons.block, "Blacklisted Contacts", context, const BlacklistPage()),
-      _buildDrawerItem2(Icons.folder, "Quarantine Folder", context, const QuarantineFolderPage()),
-      _buildDrawerItem2(Icons.settings, "Customisable Filtering Settings", context, const CustomisableFilteringHomePage()),
+          _buildDrawerItem(Icons.home, "Home", context, 0),
+          _buildDrawerItem(Icons.contacts, "Contacts", context, 1),
+          _buildDrawerItem(Icons.message, "Messages", context, 2),
+          _buildDrawerItem(Icons.person, "Profile", context, 3),
+          _buildDrawerItem2(Icons.check_circle, "Whitelisted Contacts", context,
+              const WhitelistPage()),
+          _buildDrawerItem2(Icons.block, "Blacklisted Contacts", context,
+              const BlacklistPage()),
+          _buildDrawerItem2(Icons.folder, "Quarantine Folder", context,
+              const QuarantineFolderPage()),
+          _buildDrawerItem2(Icons.settings, "Customisable Filtering Settings",
+              context, const CustomisableFilteringHomePage()),
         ],
       ),
     );
@@ -111,12 +117,14 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
     }
   }
 
-  ListTile _buildDrawerItem(IconData icon, String title, BuildContext context, int index) {
+  ListTile _buildDrawerItem(
+      IconData icon, String title, BuildContext context, int index) {
     return ListTile(
       leading: Icon(icon, color: const Color(0xFF113953)),
       title: Text(
         title,
-        style: const TextStyle(fontSize: 16, color: Color.fromARGB(200, 0, 0, 0)),
+        style:
+            const TextStyle(fontSize: 16, color: Color.fromARGB(200, 0, 0, 0)),
       ),
       onTap: () {
         Navigator.pop(context); // Close the drawer
@@ -127,21 +135,24 @@ class _SideNavigationBarState extends State<SideNavigationBar> {
     );
   }
 
-  ListTile _buildDrawerItem2(IconData icon, String title, BuildContext context, Widget destinationPage) {
+  ListTile _buildDrawerItem2(IconData icon, String title, BuildContext context,
+      Widget destinationPage) {
     return ListTile(
       leading: Icon(icon, color: const Color(0xFF113953)),
       title: Text(
         title,
-        style: const TextStyle(fontSize: 16, color: Color.fromARGB(200, 0, 0, 0)),
+        style:
+            const TextStyle(fontSize: 16, color: Color.fromARGB(200, 0, 0, 0)),
       ),
       onTap: () {
         Navigator.pop(context); // Close the drawer on tap
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => destinationPage), // Navigate to the provided page
+          MaterialPageRoute(
+              builder: (context) =>
+                  destinationPage), // Navigate to the provided page
         );
       },
     );
   }
-
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:smsecure/Pages/Login/ForgotPassword/ForgotPassword.dart';
 import 'package:smsecure/Pages/SignUp/SignUp.dart';
 import 'package:smsecure/Pages/Login/OtpVerificationCustLogin.dart';
 
@@ -178,12 +179,12 @@ class _CustloginState extends State<Custlogin> {
                     padding: const EdgeInsets.only(bottom: 30.0),
                     child: GestureDetector(
                       onTap: () {
-                        // Navigator.push(
-                        //   context,
-                        //   MaterialPageRoute(
-                        //     builder: (context) => const Forgotpassword(),
-                        //   ),
-                        // );
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ForgotpasswordLogin(),
+                          ),
+                        );
                       },
                       child: const Text(
                         "Forgot Password?",

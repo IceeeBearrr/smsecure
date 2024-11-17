@@ -14,7 +14,8 @@ class _SignupState extends State<Signup> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  final TextEditingController confirmPasswordController = TextEditingController();
+  final TextEditingController confirmPasswordController =
+      TextEditingController();
   bool termsAccepted = false;
   final _formKey = GlobalKey<FormState>();
 
@@ -46,7 +47,8 @@ class _SignupState extends State<Signup> {
           .get();
 
       if (emailCheck.docs.isNotEmpty || phoneCheck.docs.isNotEmpty) {
-        _showErrorDialog('An account with this email or phone number already exists.');
+        _showErrorDialog(
+            'An account with this email or phone number already exists.');
         Future.delayed(const Duration(seconds: 2), () {
           Navigator.pop(context); // Redirect to the login page
         });
@@ -67,7 +69,6 @@ class _SignupState extends State<Signup> {
     }
   }
 
-
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
@@ -81,6 +82,145 @@ class _SignupState extends State<Signup> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showTermsAndConditions() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text(
+            'Terms and Conditions',
+            style: TextStyle(fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          content: SizedBox(
+            height:
+                400, // Set a fixed height for the modal to show the scroll bar
+            width: double.maxFinite,
+            child: Scrollbar(
+              thumbVisibility: true, // Ensures the scroll bar is visible
+              child: SingleChildScrollView(
+                child: RichText(
+                  textAlign: TextAlign.justify,
+                  text: const TextSpan(
+                    style: TextStyle(color: Colors.black, fontSize: 16),
+                    children: [
+                      TextSpan(
+                        text: 'Welcome to SMSecure!\n\n',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text:
+                            'By using our application, you agree to the following terms and conditions:\n\n',
+                      ),
+                      TextSpan(
+                        text: '1. User Account Responsibility:\n',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text:
+                            '- You are responsible for maintaining the confidentiality of your account information.\n'
+                            '- You must provide accurate and up-to-date information when creating an account.\n\n',
+                      ),
+                      TextSpan(
+                        text: '2. Usage Restrictions:\n',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text:
+                            '- The app must not be used for illegal, fraudulent, or malicious purposes.\n'
+                            '- You agree not to attempt to reverse engineer, modify, or tamper with the app.\n\n',
+                      ),
+                      TextSpan(
+                        text: '3. Data Privacy:\n',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text:
+                            '- SMSecure collects and stores user data in compliance with data protection regulations.\n'
+                            '- Your personal information will not be shared with third parties without your consent.\n\n',
+                      ),
+                      TextSpan(
+                        text: '4. Spam Filtering:\n',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text:
+                            '- Our app uses advanced machine learning models to filter spam messages.\n'
+                            '- While we strive for accuracy, no filtering system is perfect, and legitimate messages may occasionally be flagged.\n\n',
+                      ),
+                      TextSpan(
+                        text: '5. Limitation of Liability:\n',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text:
+                            '- SMSecure is not liable for any damages or losses arising from the use or inability to use the app.\n\n',
+                      ),
+                      TextSpan(
+                        text: '6. Modifications to the Service:\n',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text:
+                            '- We reserve the right to update or discontinue features of the app at any time.\n\n',
+                      ),
+                      TextSpan(
+                        text: '7. Termination of Account:\n',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text:
+                            '- Your account may be terminated if you violate these terms.\n\n',
+                      ),
+                      TextSpan(
+                        text: '8. Intellectual Property:\n',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text:
+                            '- The app and its content are the intellectual property of SMSecure and are protected by copyright laws.\n\n',
+                      ),
+                      TextSpan(
+                        text: '9. Updates and Notifications:\n',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text:
+                            '- By using SMSecure, you agree to receive notifications regarding updates, maintenance, and promotions.\n\n',
+                      ),
+                      TextSpan(
+                        text: '10. Governing Law:\n',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text:
+                            '- These terms are governed by the laws of your jurisdiction.\n\n',
+                      ),
+                      TextSpan(
+                        text:
+                            'By continuing to use the SMSecure app, you acknowledge that you have read, understood, and agreed to these terms.\n\n',
+                      ),
+                      TextSpan(
+                        text: 'Thank you for choosing SMSecure!',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -130,7 +270,8 @@ class _SignupState extends State<Signup> {
                       decoration: InputDecoration(
                         labelText: 'Full name',
                         labelStyle: const TextStyle(color: Colors.black38),
-                        prefixIcon: const Icon(Icons.person_outline, color: Colors.black38),
+                        prefixIcon: const Icon(Icons.person_outline,
+                            color: Colors.black38),
                         filled: true,
                         fillColor: Colors.grey[100],
                         border: OutlineInputBorder(
@@ -157,7 +298,8 @@ class _SignupState extends State<Signup> {
                       decoration: InputDecoration(
                         labelText: 'Email',
                         labelStyle: const TextStyle(color: Colors.black38),
-                        prefixIcon: const Icon(Icons.email, color: Colors.black38),
+                        prefixIcon:
+                            const Icon(Icons.email, color: Colors.black38),
                         filled: true,
                         fillColor: Colors.grey[100],
                         border: OutlineInputBorder(
@@ -169,7 +311,8 @@ class _SignupState extends State<Signup> {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your email';
                         }
-                        if (!RegExp(r'^[\w-]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                        if (!RegExp(r'^[\w-]+@([\w-]+\.)+[\w-]{2,4}$')
+                            .hasMatch(value)) {
                           return 'Please enter a valid email address';
                         }
                         return null;
@@ -186,7 +329,8 @@ class _SignupState extends State<Signup> {
                       decoration: InputDecoration(
                         labelText: 'Phone number',
                         labelStyle: const TextStyle(color: Colors.black38),
-                        prefixIcon: const Icon(Icons.phone, color: Colors.black38),
+                        prefixIcon:
+                            const Icon(Icons.phone, color: Colors.black38),
                         filled: true,
                         fillColor: Colors.grey[100],
                         border: OutlineInputBorder(
@@ -215,7 +359,8 @@ class _SignupState extends State<Signup> {
                       decoration: InputDecoration(
                         labelText: 'Password',
                         labelStyle: const TextStyle(color: Colors.black38),
-                        prefixIcon: const Icon(Icons.lock, color: Colors.black38),
+                        prefixIcon:
+                            const Icon(Icons.lock, color: Colors.black38),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _isPasswordVisible
@@ -252,7 +397,8 @@ class _SignupState extends State<Signup> {
                         if (!RegExp(r'[0-9]').hasMatch(value)) {
                           return 'Password must contain at least one digit';
                         }
-                        if (!RegExp(r'[!@#$%^&*(),.?":{}|<>_]').hasMatch(value)) {
+                        if (!RegExp(r'[!@#$%^&*(),.?":{}|<>_]')
+                            .hasMatch(value)) {
                           return 'Password must contain at least one special character';
                         }
                         return null;
@@ -269,7 +415,8 @@ class _SignupState extends State<Signup> {
                       decoration: InputDecoration(
                         labelText: 'Confirm Password',
                         labelStyle: const TextStyle(color: Colors.black38),
-                        prefixIcon: const Icon(Icons.lock, color: Colors.black38),
+                        prefixIcon:
+                            const Icon(Icons.lock, color: Colors.black38),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _isConfirmPasswordVisible
@@ -279,7 +426,8 @@ class _SignupState extends State<Signup> {
                           ),
                           onPressed: () {
                             setState(() {
-                              _isConfirmPasswordVisible = !_isConfirmPasswordVisible;
+                              _isConfirmPasswordVisible =
+                                  !_isConfirmPasswordVisible;
                             });
                           },
                         ),
@@ -315,10 +463,18 @@ class _SignupState extends State<Signup> {
                             });
                           },
                         ),
-                        const Expanded(
-                          child: Text(
-                            'By checking the box you agree to our Terms and Conditions.',
-                            style: TextStyle(fontSize: 14, color: Colors.grey),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _showTermsAndConditions,
+                            child: const Text(
+                              'By checking the box, you agree to our Terms and Conditions.',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey,
+                                decoration: TextDecoration
+                                    .underline, // Underline the text
+                              ),
+                            ),
                           ),
                         ),
                       ],

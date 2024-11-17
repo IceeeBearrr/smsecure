@@ -1,34 +1,28 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:smsecure/Pages/Login/ForgotPassword/SetNewPassword.dart';
 import 'package:twilio_flutter/twilio_flutter.dart';
-import 'package:smsecure/Pages/Login/CustLogin.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-class OtpVerificationSignUp extends StatefulWidget {
-  final String name;
-  final String email;
+const FlutterSecureStorage secureStorage = FlutterSecureStorage();
+
+class ForgotPasswordOTPLogin extends StatefulWidget {
   final String phone;
-  final String password;
 
-  const OtpVerificationSignUp({
-    super.key,
-    required this.name,
-    required this.email,
-    required this.phone,
-    required this.password,
-  });
+  const ForgotPasswordOTPLogin({super.key, required this.phone});
 
   @override
-  _OtpVerificationSignUpState createState() => _OtpVerificationSignUpState();
+  _ForgotPasswordOTPLoginState createState() => _ForgotPasswordOTPLoginState();
 }
 
-class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
-  final List<TextEditingController> otpControllers = List.generate(6, (index) => TextEditingController());
-  final List<FocusNode> otpFocusNodes = List.generate(6, (index) => FocusNode());
+class _ForgotPasswordOTPLoginState extends State<ForgotPasswordOTPLogin>
+    with WidgetsBindingObserver {
+  final List<TextEditingController> otpControllers =
+      List.generate(6, (index) => TextEditingController());
   int _remainingTime = 60;
-  late Timer _timer;
+  Timer? _timer;
   bool _canResend = false;
   String generatedOtp = '';
   late TwilioFlutter twilioFlutter;
@@ -36,64 +30,86 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     twilioFlutter = TwilioFlutter(
       accountSid: 'ACeb000c82d06c291817006b2e6c2b7aa6',
       authToken: 'fd828490e438dbc1113c99b1019668f7',
       twilioNumber: '+18145805618',
     );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeOtpProcess();
+    });
+  }
+
+  void _initializeOtpProcess() {
     _startCountdown();
     _sendOtp();
   }
 
   @override
   void dispose() {
-    if (_timer.isActive) {
-      _timer.cancel();
-    }
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
     for (var controller in otpControllers) {
       controller.dispose();
-    }
-    for (var focusNode in otpFocusNodes) {
-      focusNode.dispose();
     }
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        _remainingTime > 0 &&
+        _timer == null) {
+      _startCountdown();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _timer?.cancel();
+    }
+  }
+
   void _startCountdown() {
     _canResend = false;
+    _timer
+        ?.cancel(); // Ensure the previous timer is cancelled before starting a new one
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_remainingTime > 0) {
-        setState(() {
-          _remainingTime--;
-        });
+      if (mounted) {
+        // Check if mounted
+        if (_remainingTime > 0) {
+          setState(() {
+            _remainingTime--;
+          });
+        } else {
+          setState(() {
+            _canResend = true;
+          });
+          _timer?.cancel();
+          _timer = null;
+        }
       } else {
-        setState(() {
-          _canResend = true;
-          _timer.cancel();
-        });
+        timer.cancel(); // Cancel the timer if the widget is not mounted
       }
     });
   }
 
   void _sendOtp() {
-    setState(() {
-      generatedOtp = _generateOtp();
-    });
-    try {
-      twilioFlutter.sendSMS(
-        toNumber: widget.phone,
-        messageBody: 'Your OTP code is: $generatedOtp',
-      ).then((_) {
+    generatedOtp = _generateOtp();
+    twilioFlutter
+        .sendSMS(
+      toNumber: widget.phone,
+      messageBody: 'Your OTP code is: $generatedOtp',
+    )
+        .then((_) {
+      if (mounted) {
         print('OTP sent to ${widget.phone}: $generatedOtp');
-      }).catchError((error, stackTrace) {
+      }
+    }).catchError((error) {
+      if (mounted) {
         print('Failed to send OTP. Error: $error');
-        print('StackTrace: $stackTrace');
         _showErrorDialog('Failed to send OTP. Please try again.');
-      });
-    } catch (e) {
-      print('Error occurred while sending OTP: $e');
-      _showErrorDialog('An unexpected error occurred while sending OTP. Please try again later.');
-    }
+      }
+    });
   }
 
   String _generateOtp() {
@@ -102,86 +118,45 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
   }
 
   void _resendCode() {
-    setState(() {
-      _remainingTime = 60;
-      _startCountdown();
-      _sendOtp();
-    });
-  }
-
-  Future<void> _verifyOtpAndRegisterUser() async {
-    String enteredOtp = otpControllers.map((controller) => controller.text).join();
-    if (enteredOtp == generatedOtp) {
-      // Step 1: Register the user in Firestore
-      String smsUserID = await _registerUserInFirestore();
-
-      // Step 2: Update the contact collection if the phone number matches
-      if (smsUserID.isNotEmpty) {
-        await _updateRegisteredSMSUserID(smsUserID);
-      }
-      _showSuccessDialog(); // Show success message and redirect to login
-    } else {
-      _showErrorDialog('Invalid OTP. Please try again.');
-    }
-  }
-
-  Future<String> _registerUserInFirestore() async {
-    CollectionReference smsUsers = FirebaseFirestore.instance.collection('smsUser');
-    // Generate a unique smsUserID by combining the current timestamp and a random integer
-    String smsUserID = DateTime.now().millisecondsSinceEpoch.toString() + Random().nextInt(10000).toString();
-
-    try {
-      await smsUsers.doc(smsUserID).set({
-        'smsUserID': smsUserID,
-        'name': widget.name,
-        'phoneNo': widget.phone,
-        'emailAddress': widget.email,
-        'password': widget.password,
+    if (mounted) {
+      setState(() {
+        _remainingTime = 60;
+        _startCountdown();
+        _sendOtp();
       });
-      print("User registered successfully.");
-      return smsUserID;
-    } catch (e) {
-      print("Error adding user: $e");
-      _showErrorDialog("An error occurred while registering the user. Please try again.");
-      return '';
     }
   }
 
-  Future<void> _updateRegisteredSMSUserID(String smsUserID) async {
-    try {
-      final contactQuery = await FirebaseFirestore.instance
-          .collection('contact')
-          .where('phoneNo', isEqualTo: widget.phone)
-          .get();
-
-      if (contactQuery.docs.isNotEmpty) {
-        for (var doc in contactQuery.docs) {
-          await doc.reference.update({'registeredSMSUserID': smsUserID});
-          print("Updated registeredSMSUserID for contact: ${doc.id}");
-        }
-      } else {
-        print("No matching contact found for phone number: ${widget.phone}");
+  Future<void> _verifyOtpAndProceed() async {
+    String enteredOtp =
+        otpControllers.map((controller) => controller.text).join();
+    if (enteredOtp == generatedOtp) {
+      if (mounted) {
+        _showSuccessDialog(); // Show success dialog and then redirect
       }
-    } catch (e) {
-      print("Error updating registeredSMSUserID in contact collection: $e");
+    } else {
+      if (mounted) {
+        _showErrorDialog('Invalid OTP. Please try again.');
+      }
     }
   }
 
   void _showSuccessDialog() {
     showDialog(
       context: context,
-      barrierDismissible: false, // Prevents closing by tapping outside the dialog
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Success'),
-        content: const Text('Your account has been created successfully!'),
+        content: const Text('OTP verified successfully!'),
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.of(context).pop(); // Close the dialog
-              Navigator.pushReplacement(
+              Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const Custlogin()),
-              ); // Redirect to login page
+                MaterialPageRoute(
+                  builder: (context) => SetNewPasswordLogin(phone: widget.phone),
+                ),
+              );
             },
             child: const Text('OK'),
           ),
@@ -191,19 +166,21 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
   }
 
   void _showErrorDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Error'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Error'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   @override
@@ -220,7 +197,7 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
               const Padding(
                 padding: EdgeInsets.only(bottom: 10.0),
                 child: Text(
-                  "Almost there",
+                  "OTP Verification",
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -250,11 +227,12 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
                       height: 55,
                       child: TextField(
                         controller: otpControllers[index],
-                        focusNode: otpFocusNodes[index],
                         keyboardType: TextInputType.number,
                         textAlign: TextAlign.center,
                         maxLength: 1,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
                         decoration: InputDecoration(
                           counterText: "",
                           filled: true,
@@ -264,15 +242,11 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
                             borderSide: BorderSide.none,
                           ),
                         ),
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                        onTap: () {
-                          SystemChannels.textInput.invokeMethod('TextInput.show');
-                        },
+                        style: const TextStyle(
+                            fontSize: 24, fontWeight: FontWeight.bold),
                         onChanged: (value) {
                           if (value.length == 1 && index < 5) {
-                            FocusScope.of(context).requestFocus(otpFocusNodes[index + 1]);
-                          } else if (value.isEmpty && index > 0) {
-                            FocusScope.of(context).requestFocus(otpFocusNodes[index - 1]);
+                            FocusScope.of(context).nextFocus();
                           }
                         },
                       ),
@@ -283,7 +257,7 @@ class _OtpVerificationSignUpState extends State<OtpVerificationSignUp> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 20.0),
                 child: ElevatedButton(
-                  onPressed: _verifyOtpAndRegisterUser,
+                  onPressed: _verifyOtpAndProceed,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     backgroundColor: const Color.fromARGB(255, 47, 77, 129),

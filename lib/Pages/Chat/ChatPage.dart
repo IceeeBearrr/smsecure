@@ -121,9 +121,31 @@ class _ChatpageState extends State<Chatpage> {
             (userSnapshot.data() as Map<String, dynamic>)['name'] ?? "Unknown";
       });
     }
-
+    // Reset unread count for the current user
+    await resetUnreadCount();
     // Load participant details
     await loadParticipantDetails();
+  }
+
+  Future<void> resetUnreadCount() async {
+    userPhone = await storage.read(key: "userPhone");
+
+    if (userPhone == null || widget.conversationID.isEmpty) {
+      debugPrint("User phone number or conversation ID is missing.");
+      return;
+    }
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(widget.conversationID)
+          .update({
+        'participantData.$userPhone.unreadCount': 0,
+      });
+      debugPrint("Unread count for $userPhone reset to 0.");
+    } catch (e) {
+      debugPrint("Error resetting unread count: $e");
+    }
   }
 
   @override
