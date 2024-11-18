@@ -705,10 +705,6 @@ class _RecentchatsState extends State<Recentchats> {
                                                 var conversationData =
                                                     snapshot.data!.data()
                                                         as Map<String, dynamic>;
-
-                                                if (conversationData == null) {
-                                                  return Container(); // Handle case where data is null
-                                                }
                                                 var participantData =
                                                     conversationData[
                                                             'participantData'] ??

@@ -91,7 +91,7 @@ class CustomisableFilteringList extends StatelessWidget {
                           Colors.white, // Ensure the background is pure white
                       borderRadius:
                           BorderRadius.circular(15), // Rounded corners
-                      boxShadow: [], // No shadows
+                      boxShadow: const [], // No shadows
                       border: Border.all(
                           color: Colors.transparent), // Transparent border
                     ),
