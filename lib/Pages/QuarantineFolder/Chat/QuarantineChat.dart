@@ -111,64 +111,98 @@ class _QuarantineChatState extends State<QuarantineChat>
   void _showSpamMessageDetails(Map<String, dynamic> spamDetails) {
     String detectedDue = spamDetails['detectedDue'] ?? "Unknown";
     String rawConfidence = spamDetails['confidenceLevel'] ?? "0";
+    String keyword = spamDetails['keyword'] ?? "N/A";
+    bool isKeywordNull = (keyword.isEmpty);
+
     List<TextSpan> explanationSpans = [];
     String formattedConfidence =
         formatConfidenceLevelBasedOnModel(detectedDue, rawConfidence);
 
     if (detectedDue == "Custom Filter") {
       explanationSpans.addAll([
-        const TextSpan(text: "This message was flagged because you set a custom filter to block messages like this. The confidence level is always "),
-        const TextSpan(text: "100%", style: TextStyle(fontWeight: FontWeight.bold)),
-        const TextSpan(text: " because custom filters directly mark messages as spam if they match your block rules."),
+        const TextSpan(
+            text:
+                "This message was flagged because you set a custom filter to block messages like this. The confidence level is always "),
+        const TextSpan(
+            text: "100%", style: TextStyle(fontWeight: FontWeight.bold)),
+        const TextSpan(
+            text:
+                " because custom filters directly mark messages as spam if they match your block rules."),
       ]);
     } else if (detectedDue == "Bidirectional LSTM") {
       explanationSpans.addAll([
-        const TextSpan(text: "This message was flagged by an advanced machine learning model (Bidirectional LSTM). The model analyzes the message based on word patterns and order.\n\n"),
-        const TextSpan(text: "Confidence Level Interpretation:\n", style: TextStyle(fontWeight: FontWeight.bold)),
+        const TextSpan(
+            text:
+                "This message was flagged by an advanced machine learning model (Bidirectional LSTM). The model analyzes the message based on word patterns and order.\n\n"),
+        const TextSpan(
+            text: "Confidence Level Interpretation:\n",
+            style: TextStyle(fontWeight: FontWeight.bold)),
         const TextSpan(text: "- "),
-        const TextSpan(text: "80% and above", style: TextStyle(fontWeight: FontWeight.bold)),
+        const TextSpan(
+            text: "80% and above",
+            style: TextStyle(fontWeight: FontWeight.bold)),
         const TextSpan(text: ": Very high confidence that this is spam.\n"),
         const TextSpan(text: "- "),
-        const TextSpan(text: "50% to 79%", style: TextStyle(fontWeight: FontWeight.bold)),
+        const TextSpan(
+            text: "50% to 79%", style: TextStyle(fontWeight: FontWeight.bold)),
         const TextSpan(text: ": Likely spam, but not strongly certain.\n"),
         const TextSpan(text: "- "),
-        const TextSpan(text: "Below 50%", style: TextStyle(fontWeight: FontWeight.bold)),
+        const TextSpan(
+            text: "Below 50%", style: TextStyle(fontWeight: FontWeight.bold)),
         const TextSpan(text: ": Considered non-spam."),
       ]);
     } else if (detectedDue == "Multinomial NB") {
       explanationSpans.addAll([
-        const TextSpan(text: "This message was flagged by a statistical model (Multinomial Naive Bayes). The model compares the message's words with those commonly seen in spam.\n\n"),
-        const TextSpan(text: "Confidence Level Interpretation:\n", style: TextStyle(fontWeight: FontWeight.bold)),
+        const TextSpan(
+            text:
+                "This message was flagged by a statistical model (Multinomial Naive Bayes). The model compares the message's words with those commonly seen in spam.\n\n"),
+        const TextSpan(
+            text: "Confidence Level Interpretation:\n",
+            style: TextStyle(fontWeight: FontWeight.bold)),
         const TextSpan(text: "- "),
-        const TextSpan(text: "90% and above", style: TextStyle(fontWeight: FontWeight.bold)),
-        const TextSpan(text: ": Extremely high confidence that this is spam.\n"),
+        const TextSpan(
+            text: "90% and above",
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        const TextSpan(
+            text: ": Extremely high confidence that this is spam.\n"),
         const TextSpan(text: "- "),
-        const TextSpan(text: "60% to 89%", style: TextStyle(fontWeight: FontWeight.bold)),
+        const TextSpan(
+            text: "60% to 89%", style: TextStyle(fontWeight: FontWeight.bold)),
         const TextSpan(text: ": Likely spam, with moderate confidence.\n"),
         const TextSpan(text: "- "),
-        const TextSpan(text: "Below 60%", style: TextStyle(fontWeight: FontWeight.bold)),
+        const TextSpan(
+            text: "Below 60%", style: TextStyle(fontWeight: FontWeight.bold)),
         const TextSpan(text: ": Considered non-spam."),
       ]);
     } else if (detectedDue == "Linear SVM") {
       explanationSpans.addAll([
-        const TextSpan(text: "This message was detected by a machine learning method (Linear SVM). It evaluates the message by measuring its distance from a boundary between spam and non-spam messages.\n\n"),
-        const TextSpan(text: "Confidence Level Interpretation:\n", style: TextStyle(fontWeight: FontWeight.bold)),
+        const TextSpan(
+            text:
+                "This message was detected by a machine learning method (Linear SVM). It evaluates the message by measuring its distance from a boundary between spam and non-spam messages.\n\n"),
+        const TextSpan(
+            text: "Confidence Level Interpretation:\n",
+            style: TextStyle(fontWeight: FontWeight.bold)),
         const TextSpan(text: "- "),
-        const TextSpan(text: "70% and above", style: TextStyle(fontWeight: FontWeight.bold)),
+        const TextSpan(
+            text: "70% and above",
+            style: TextStyle(fontWeight: FontWeight.bold)),
         const TextSpan(text: ": High confidence that this is spam.\n"),
         const TextSpan(text: "- "),
-        const TextSpan(text: "40% to 69%", style: TextStyle(fontWeight: FontWeight.bold)),
+        const TextSpan(
+            text: "40% to 69%", style: TextStyle(fontWeight: FontWeight.bold)),
         const TextSpan(text: ": Possibly spam, but not certain.\n"),
         const TextSpan(text: "- "),
-        const TextSpan(text: "Below 40%", style: TextStyle(fontWeight: FontWeight.bold)),
+        const TextSpan(
+            text: "Below 40%", style: TextStyle(fontWeight: FontWeight.bold)),
         const TextSpan(text: ": Considered non-spam."),
       ]);
     } else {
       explanationSpans.addAll([
-        const TextSpan(text: "The detection method for this message is unknown. Please contact support for more details."),
+        const TextSpan(
+            text:
+                "The detection method for this message is unknown. Please contact support for more details."),
       ]);
     }
-
 
     showDialog(
       context: context,
@@ -183,18 +217,52 @@ class _QuarantineChatState extends State<QuarantineChat>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      const TextSpan(
-                        text: "Keyword: ",
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                Row(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.center, // Ensures vertical alignment
+                  children: [
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            const TextSpan(
+                              text: "Keyword: ",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            TextSpan(
+                              text: isKeywordNull ? "No Keyword" : keyword,
+                              style: TextStyle(
+                                color: isKeywordNull
+                                    ? const Color.fromARGB(179, 55, 55, 55)
+                                    : Colors.black,
+                              ),
+                            ),
+                          ],
+                        ),
+                        textAlign: TextAlign.justify,
                       ),
-                      TextSpan(text: spamDetails['keyword']),
-                    ],
-                  ),
-                  textAlign: TextAlign.justify,
+                    ),
+                    
+                    if (detectedDue == "Bidirectional LSTM") // Add info icon
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4.0),
+                        child: GestureDetector(
+                          onTap: () => _showDetectionExplanationDialog([
+                            const TextSpan(
+                              text:
+                                  "Bidirectional LSTM predicts spam based on the sequential structure of the entire sentence, analyzing word patterns and their order rather than individual word contributions. As a result, no specific keyword is available for display.",
+                            ),
+                          ]),
+                          child: const Icon(
+                            Icons.info_outline,
+                            size: 20,
+                            color: Color.fromARGB(179, 55, 55, 55),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
+                const SizedBox(height: 8),
                 Text.rich(
                   TextSpan(
                     children: [
@@ -208,8 +276,7 @@ class _QuarantineChatState extends State<QuarantineChat>
                   textAlign: TextAlign.justify,
                 ),
                 Row(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.center, // Ensures vertical alignment
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
                       child: Text.rich(
@@ -226,9 +293,7 @@ class _QuarantineChatState extends State<QuarantineChat>
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(
-                          left:
-                              4.0), // Adds small spacing between text and icon
+                      padding: const EdgeInsets.only(left: 4.0),
                       child: GestureDetector(
                         onTap: () =>
                             _showDetectionExplanationDialog(explanationSpans),
@@ -240,6 +305,7 @@ class _QuarantineChatState extends State<QuarantineChat>
                     ),
                   ],
                 ),
+                const SizedBox(height: 8),
                 Text.rich(
                   TextSpan(
                     children: [
@@ -254,6 +320,7 @@ class _QuarantineChatState extends State<QuarantineChat>
                   ),
                   textAlign: TextAlign.justify,
                 ),
+                const SizedBox(height: 8),
                 Text.rich(
                   TextSpan(
                     children: [

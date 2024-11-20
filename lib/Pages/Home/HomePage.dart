@@ -9,6 +9,7 @@ import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:http/http.dart' as http;
 import 'package:fl_chart/fl_chart.dart';
+import 'package:smsecure/Pages/Home/push_notification_service.dart';
 
 const MethodChannel smsChannel = MethodChannel("com.smsecure.app/sms");
 
@@ -204,6 +205,7 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
         'isIncoming': true,
         'isBlacklisted': true,
       }, SetOptions(merge: true));
+
       return; // Exit as the sender is blacklisted
     }
 
@@ -356,6 +358,14 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
           'isBlacklisted': false,
         }, SetOptions(merge: true));
 
+        PushNotificationService.sendNotificationToUser(
+          smsUserID: smsUserID,
+          senderName: senderName,
+          senderPhone: senderPhoneNumber,
+          messageContent:
+              "Message blocked from $senderPhoneNumber using Custom Filter. It is now in the quarantine folder.",
+        );
+
         return;
       } catch (e) {
         print("Error adding to spamContact collection: $e");
@@ -418,6 +428,37 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
       } catch (e) {
         print("Error adding message to conversations: $e");
       }
+
+      String? senderName;
+
+      // Check in the user's contact collection
+      final contactSnapshot = await firestore
+          .collection('contact')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .where('phoneNo', isEqualTo: senderPhoneNumber)
+          .get();
+
+      if (contactSnapshot.docs.isNotEmpty) {
+        senderName = contactSnapshot.docs.first.get('name');
+        for (var doc in contactSnapshot.docs) {
+          try {
+            await doc.reference.update({'isSpam': true});
+          } catch (e) {
+            print(
+                "Error updating isSpam field for contact: ${doc.id}, Error: $e");
+          }
+        }
+      }
+
+      senderName ??= "Unknown";
+
+      PushNotificationService.sendNotificationToUser(
+        smsUserID: smsUserID,
+        senderName: senderName,
+        senderPhone: senderPhoneNumber,
+        messageContent:
+            "${message.messageBody} (Message is allowed due to Custom Filter)",
+      );
       return;
     }
 
@@ -430,12 +471,18 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
 
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.0.117:5000/predict'),
+        Uri.parse('http://192.168.6.243:5000/predict'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(predictionRequest),
       );
+
       print("Prediction API response status: ${response.statusCode}");
       print("Prediction API response body: ${response.body}");
+
+      if (response.statusCode != 200) {
+        print("Error: Non-200 response from Flask API");
+        print("Response: ${response.body}");
+      }
 
       if (response.statusCode == 200) {
         final predictionResult = json.decode(response.body);
@@ -444,7 +491,7 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
           return;
         }
         bool isSpam = predictionResult['isSpam'] ?? false;
-        String? keyword = predictionResult['keyword'] ?? "unknown";
+        String? keyword = predictionResult['keyword'];
         double confidenceLevel =
             (predictionResult['confidenceLevel'] ?? 0.0).toDouble();
         double processingTime =
@@ -570,6 +617,14 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
               'isBlacklisted': false,
             }, SetOptions(merge: true));
 
+            PushNotificationService.sendNotificationToUser(
+              smsUserID: smsUserID,
+              senderName: senderName, // Will use senderPhone instead
+              senderPhone: senderPhoneNumber,
+              messageContent:
+                  "New spam detected from $senderPhoneNumber using $chosenPredictionModel. It is now in the quarantine folder.",
+            );
+
             return;
           } catch (e) {
             print("Error adding to spamContact collection: $e");
@@ -586,6 +641,29 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
     final participants = [userPhone, senderPhoneNumber];
     participants.sort();
     final conversationID = participants.join('_');
+
+    String? senderName;
+
+    // Check in the user's contact collection
+    final contactSnapshot = await firestore
+        .collection('contact')
+        .where('smsUserID', isEqualTo: smsUserID)
+        .where('phoneNo', isEqualTo: senderPhoneNumber)
+        .get();
+
+    if (contactSnapshot.docs.isNotEmpty) {
+      senderName = contactSnapshot.docs.first.get('name');
+      for (var doc in contactSnapshot.docs) {
+        try {
+          await doc.reference.update({'isSpam': true});
+        } catch (e) {
+          print(
+              "Error updating isSpam field for contact: ${doc.id}, Error: $e");
+        }
+      }
+    }
+
+    senderName ??= "Unknown";
 
     final conversationSnapshot = await firestore
         .collection('conversations')
@@ -631,6 +709,13 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
       'isIncoming': true,
       'isBlacklisted': false,
     }, SetOptions(merge: true));
+
+    PushNotificationService.sendNotificationToUser(
+      smsUserID: smsUserID,
+      senderName: senderName, // Will use senderPhone instead
+      senderPhone: senderPhoneNumber,
+      messageContent: message.messageBody,
+    );
   } catch (e) {
     print("Error adding message to conversations: $e");
   }
@@ -668,6 +753,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
   final MethodChannel platform = const MethodChannel("com.tarumt.smsecure/sms");
   final FirebaseFirestore firestore = FirebaseFirestore.instance;
+  final PushNotificationService _pushNotificationService =
+      PushNotificationService();
 
   bool _permissionsGranted = false;
   bool _isLoading = true;
@@ -684,6 +771,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _initialize();
     _initializeSmsListener();
     _fetchStats();
+
+    final pushNotificationService = PushNotificationService();
+    pushNotificationService.getDeviceToken().then((deviceToken) {
+      if (deviceToken != null) {
+        pushNotificationService.saveDeviceToken(deviceToken);
+      } else {
+        print("Failed to retrieve device token.");
+      }
+    });
   }
 
   @override
@@ -1457,7 +1553,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             return AlertDialog(
               title: const Text("Spam Trends"),
               content: const Text(
-                "Spam Trends shows the top keywords in spam messages to help foster user awareness.",
+                "The top words displayed here are extracted based on the prediction models "
+                "Multinomial Naive Bayes (NB) and Linear SVM. These models analyze word frequencies "
+                "to determine the likelihood of a message being spam.\n\n"
+                "Note: Bidirectional LSTM is not included because it predicts spam based on the sequential "
+                "structure of the entire sentence, rather than individual word contributions.",
                 textAlign: TextAlign.justify,
               ),
               actions: [
@@ -1779,11 +1879,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     try {
       final querySnapshot = await FirebaseFirestore.instance
           .collectionGroup('spamMessages')
-          .where('detectedDue', whereIn: [
-        'Bidirectional LSTM',
-        'Multinomial NB',
-        'Linear SVM'
-      ]).get();
+          .where('detectedDue',
+              whereIn: ['Multinomial NB', 'Linear SVM']).get();
 
       print(
           "Fetched ${querySnapshot.docs.length} spamMessages documents"); // Debugging log

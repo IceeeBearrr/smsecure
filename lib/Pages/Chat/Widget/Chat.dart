@@ -82,8 +82,6 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
         Future.delayed(const Duration(milliseconds: 200), () {
           jumpToMessageByIndex(widget.initialMessageID!);
         });
-      } else {
-        scrollToBottom();
       }
     });
   }
@@ -104,6 +102,8 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
 
       if (widget.initialMessageID != null) {
         jumpToMessageByIndex(widget.initialMessageID!);
+      } else {
+        scrollToBottom(); // Scroll to bottom only if no specific message to jump to
       }
     } catch (e) {
       print("Error fetching messages: $e");
@@ -146,32 +146,44 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
     });
   }
 
-  /// Jump to a specific message based on the provided timestamp
+  // Jump to a specific message based on the provided timestamp
   void jumpToMessageByIndex(String messageID) {
-    final index = allMessages.indexWhere((doc) => doc.id == messageID);
-
-    if (index != -1) {
-      final offset = index * 100.0; // Adjust height estimate as per UI
-      _scrollController.animateTo(
-        offset,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-
-      // Highlight the message
-      setState(() {
-        highlightedMessageID = messageID;
-      });
-
-      Future.delayed(const Duration(seconds: 2), () {
-        setState(() {
-          highlightedMessageID = null;
-        });
-      });
-    } else {
+    if (!messageKeys.containsKey(messageID)) {
       print("Message not found: $messageID");
+      return;
     }
+
+    final key = messageKeys[messageID];
+    if (key == null) return;
+
+    final context = key.currentContext;
+    if (context == null) return;
+
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return;
+
+    final offset = box.localToGlobal(Offset.zero).dy +
+        _scrollController.offset -
+        (MediaQuery.of(context).size.height / 2); // Center the message
+
+    _scrollController.animateTo(
+      offset,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+
+    // Highlight the message
+    setState(() {
+      highlightedMessageID = messageID;
+    });
+
+    Future.delayed(const Duration(seconds: 2), () {
+      setState(() {
+        highlightedMessageID = null;
+      });
+    });
   }
+
 
   Widget buildMessage(QueryDocumentSnapshot message, bool isHighlighted) {
     final data = message.data() as Map<String, dynamic>;
@@ -602,9 +614,12 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
 
         var messages = snapshot.data!.docs;
 
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          scrollToBottom(); // Automatically scrolls to bottom on new messages
-        });
+        if (widget.initialMessageID == null && messages.isNotEmpty) {
+          // Scroll to the bottom only if no initialMessageID is provided
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            scrollToBottom();
+          });
+        }
 
         return ListView.builder(
           controller: _scrollController,
