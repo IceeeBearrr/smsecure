@@ -2,14 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
 import 'package:smsecure/Pages/BlacklistContact/BlacklistDetail.dart';
+import 'package:smsecure/Pages/Home/push_notification_service.dart';
 
 class BlacklistList extends StatelessWidget {
   final String currentUserID;
   final String searchText; // Accept search text for filtering
+  final PushNotificationService _pushNotificationService =
+      PushNotificationService();
 
-  const BlacklistList({super.key, required this.currentUserID, required this.searchText});
+  BlacklistList(
+      {super.key, required this.currentUserID, required this.searchText});
 
-  Future<String?> _getProfileImageUrl(String phoneNo, String? registeredSMSUserID) async {
+  Future<String?> _getProfileImageUrl(
+      String phoneNo, String? registeredSMSUserID) async {
     final contactQuerySnapshot = await FirebaseFirestore.instance
         .collection('contact')
         .where('phoneNo', isEqualTo: phoneNo)
@@ -26,9 +31,13 @@ class BlacklistList extends StatelessWidget {
       }
 
       // If no profileImageUrl, check for a registeredSMSUserID
-      final smsUserId = contactData['registeredSMSUserID'] ?? registeredSMSUserID;
+      final smsUserId =
+          contactData['registeredSMSUserID'] ?? registeredSMSUserID;
       if (smsUserId != null && smsUserId.isNotEmpty) {
-        final smsUserDoc = await FirebaseFirestore.instance.collection('smsUser').doc(smsUserId).get();
+        final smsUserDoc = await FirebaseFirestore.instance
+            .collection('smsUser')
+            .doc(smsUserId)
+            .get();
         if (smsUserDoc.exists) {
           profileImageUrl = smsUserDoc.data()?['profileImageUrl'];
           if (profileImageUrl != null && profileImageUrl.isNotEmpty) {
@@ -71,13 +80,14 @@ class BlacklistList extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (!blacklistSnapshot.hasData || blacklistSnapshot.data!.docs.isEmpty) {
-            return const Center(child: Text("No blacklisted contacts available"));
+          if (!blacklistSnapshot.hasData ||
+              blacklistSnapshot.data!.docs.isEmpty) {
+            return const Center(
+                child: Text("No blacklisted contacts available"));
           }
 
           var blacklistContacts = blacklistSnapshot.data!.docs;
 
-          
           // Filter contacts by search text (name or phone number)
           blacklistContacts = blacklistContacts.where((doc) {
             final name = doc['name']?.toString().toLowerCase() ?? '';
@@ -107,9 +117,11 @@ class BlacklistList extends StatelessWidget {
                     final displayName = isNumericName ? phoneNo : contactName;
                     final displayPhone = isNumericName ? '' : phoneNo;
 
-                    final profileImage = profileImageUrl != null && profileImageUrl.isNotEmpty
+                    final profileImage = profileImageUrl != null &&
+                            profileImageUrl.isNotEmpty
                         ? MemoryImage(base64Decode(profileImageUrl))
-                        : const AssetImage("images/HomePage/defaultProfile.png") as ImageProvider;
+                        : const AssetImage("images/HomePage/defaultProfile.png")
+                            as ImageProvider;
 
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 15),
@@ -119,12 +131,14 @@ class BlacklistList extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => BlacklistDetailsPage(blacklistId: blacklistEntry.id),
+                              builder: (context) => BlacklistDetailsPage(
+                                  blacklistId: blacklistEntry.id),
                             ),
                           );
                         },
                         onLongPress: () {
-                          _showContactOptions(context, displayName, blacklistEntry.id);
+                          _showContactOptions(
+                              context, displayName, blacklistEntry.id);
                         },
                         child: SizedBox(
                           height: 65,
@@ -142,10 +156,14 @@ class BlacklistList extends StatelessWidget {
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisAlignment: isNumericName ? MainAxisAlignment.center : MainAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment: isNumericName
+                                        ? MainAxisAlignment.center
+                                        : MainAxisAlignment.start,
                                     children: [
                                       Text(
                                         displayName,
@@ -187,7 +205,8 @@ class BlacklistList extends StatelessWidget {
     );
   }
 
-  void _showContactOptions(BuildContext context, String contactName, String contactId) {
+  void _showContactOptions(
+      BuildContext context, String contactName, String contactId) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -216,7 +235,8 @@ class BlacklistList extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => BlacklistDetailsPage(blacklistId: contactId),
+                      builder: (context) =>
+                          BlacklistDetailsPage(blacklistId: contactId),
                     ),
                   );
                 },
@@ -238,7 +258,8 @@ class BlacklistList extends StatelessWidget {
     );
   }
 
-  Future<void> _deleteContact(BuildContext parentContext, String contactId) async {
+  Future<void> _deleteContact(
+      BuildContext parentContext, String contactId) async {
     try {
       // Ask for confirmation
       final bool? confirm = await showDialog(
@@ -246,7 +267,8 @@ class BlacklistList extends StatelessWidget {
         builder: (BuildContext dialogContext) {
           return AlertDialog(
             title: const Text('Confirmation'),
-            content: const Text('Are you sure you want to remove this contact from the blacklist?'),
+            content: const Text(
+                'Are you sure you want to remove this contact from the blacklist?'),
             actions: [
               TextButton(
                 onPressed: () {
@@ -265,11 +287,14 @@ class BlacklistList extends StatelessWidget {
         },
       );
 
+      print('Confirmation dialog result: $confirm');
+
       if (confirm == true) {
         final firestore = FirebaseFirestore.instance;
 
         // Fetch the blacklist document
-        final blacklistDoc = await firestore.collection('blacklist').doc(contactId).get();
+        final blacklistDoc =
+            await firestore.collection('blacklist').doc(contactId).get();
         if (!blacklistDoc.exists) {
           throw "Blacklist document not found.";
         }
@@ -282,37 +307,32 @@ class BlacklistList extends StatelessWidget {
           throw "Invalid data in the blacklist document.";
         }
 
+        print('Checking for spam messages...');
+
+        bool hasSpamMessages = await _checkForSpamMessages(
+            FirebaseFirestore.instance, smsUserID, phoneNo);
+        print('Spam messages found: $hasSpamMessages');
+
+        // Update other collections (contact, conversations)
+        print('Updating contact status...');
+        await _updateContactStatus(firestore, phoneNo, smsUserID);
+        print('Contact status updated.');
+
         // Delete the blacklist document
+        print('Deleting blacklist document...');
         await firestore.collection('blacklist').doc(contactId).delete();
+        print('Blacklist document deleted.');
 
-        // Update `isBlacklisted` in the contact collection
-        final contactQuery = await firestore
-            .collection('contact')
-            .where('phoneNo', isEqualTo: phoneNo)
-            .where('smsUserID', isEqualTo: smsUserID)
-            .get();
-
-        if (contactQuery.docs.isNotEmpty) {
-          for (var contactDoc in contactQuery.docs) {
-            await contactDoc.reference.update({
-              'isBlacklisted': false,
-            });
-          }
-        }
-
-        // Update `isBlacklisted` in the conversations collection
-        final conversationQuery = await firestore
-            .collection('conversations')
-            .where('smsUserID', isEqualTo: smsUserID)
-            .where('participants', arrayContains: phoneNo)
-            .get();
-
-        if (conversationQuery.docs.isNotEmpty) {
-          for (var conversationDoc in conversationQuery.docs) {
-            await conversationDoc.reference.update({
-              'isBlacklisted': false,
-            });
-          }
+        // Show spam notification if spam messages exist
+        if (hasSpamMessages) {
+          print('Sending FCM notification...');
+          await PushNotificationService.sendNotificationToUser(
+            smsUserID: smsUserID,
+            senderName: "System Alert", // Customize the sender name
+            senderPhone: phoneNo,
+            messageContent:
+                "Spam messages were found from $phoneNo. They are in the Quarantine Folder.",
+          );
         }
 
         // Show success dialog after deletion
@@ -322,11 +342,13 @@ class BlacklistList extends StatelessWidget {
             builder: (BuildContext dialogContext) {
               return AlertDialog(
                 title: const Text('Success'),
-                content: const Text('Contact removed from blacklist successfully.'),
+                content:
+                    const Text('Contact removed from blacklist successfully.'),
                 actions: [
                   TextButton(
                     onPressed: () {
-                      Navigator.of(dialogContext).pop(); // Close the success dialog
+                      Navigator.of(dialogContext)
+                          .pop(); // Close the success dialog
                     },
                     child: const Text('OK'),
                   ),
@@ -360,4 +382,111 @@ class BlacklistList extends StatelessWidget {
     }
   }
 
+  Future<bool> _checkForSpamMessages(
+      FirebaseFirestore firestore, String smsUserID, String phoneNo) async {
+    final spamContactQuery = await firestore
+        .collection('spamContact')
+        .where('smsUserID', isEqualTo: smsUserID)
+        .where('phoneNo', isEqualTo: phoneNo)
+        .where('isRemoved', isEqualTo: false)
+        .limit(1)
+        .get();
+
+    if (spamContactQuery.docs.isNotEmpty) {
+      final spamContactDoc = spamContactQuery.docs.first;
+      final spamMessagesQuery = await firestore
+          .collection('spamContact')
+          .doc(spamContactDoc.id)
+          .collection('spamMessages')
+          .where('isRemoved', isEqualTo: false)
+          .get();
+
+      return spamMessagesQuery.docs.isNotEmpty;
+    }
+
+    return false;
+  }
+
+  Future<void> _updateContactStatus(
+      FirebaseFirestore firestore, String phoneNo, String smsUserID) async {
+    // Update contact status in contact collection
+    final contactQuery = await firestore
+        .collection('contact')
+        .where('phoneNo', isEqualTo: phoneNo)
+        .where('smsUserID', isEqualTo: smsUserID)
+        .get();
+
+    for (var contactDoc in contactQuery.docs) {
+      await contactDoc.reference.update({'isBlacklisted': false});
+    }
+
+    try {
+      // Fetch spam messages and build the map
+      final spamContactSnapshot = await firestore
+          .collection('spamContact')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .where('phoneNo', isEqualTo: phoneNo)
+          .where('isRemoved', isEqualTo: false)
+          .get();
+
+      Map<String, String> spamMessagesWithKeywords = {};
+      for (var spamContactDoc in spamContactSnapshot.docs) {
+        final spamMessagesSnapshot = await firestore
+            .collection('spamContact')
+            .doc(spamContactDoc.id)
+            .collection('spamMessages')
+            .where('isRemoved', isEqualTo: false)
+            .get();
+
+        for (var spamMessageDoc in spamMessagesSnapshot.docs) {
+          String normalizedId = normalizeID(spamMessageDoc.id);
+          spamMessagesWithKeywords[normalizedId] =
+              spamMessageDoc.get('keyword') ?? '';
+        }
+      }
+
+      print('Normalized Spam Message IDs: ${spamMessagesWithKeywords.keys}');
+
+      // Update conversation messages
+      final conversationQuery = await firestore
+          .collection('conversations')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .where('participants', arrayContains: phoneNo)
+          .get();
+
+      for (var conversationDoc in conversationQuery.docs) {
+        print('Processing conversation: ${conversationDoc.id}');
+        await conversationDoc.reference.update({'isBlacklisted': false});
+
+        final messagesSnapshot =
+            await conversationDoc.reference.collection('messages').get();
+
+        for (var messageDoc in messagesSnapshot.docs) {
+          String normalizedMessageId = normalizeID(messageDoc.id);
+
+          print(
+              'Checking Message ID: ${messageDoc.id}, Normalized ID: $normalizedMessageId');
+
+          if (spamMessagesWithKeywords.containsKey(normalizedMessageId)) {
+            try {
+              await messageDoc.reference.update({'isBlacklisted': false});
+              print('Updated isBlacklisted for Message ID: ${messageDoc.id}');
+            } catch (e) {
+              print('Failed to update message ID: ${messageDoc.id}, Error: $e');
+            }
+          } else {
+            print(
+                'No match found for Message ID: ${messageDoc.id}, skipping update.');
+          }
+        }
+      }
+    } catch (e) {
+      print('Error updating contact status: $e');
+    }
+  }
+
+  // Normalization function similar to QuarantineChat.dart
+  String normalizeID(String id) {
+    return id.split('_').first; // Normalize IDs by taking the first part
+  }
 }

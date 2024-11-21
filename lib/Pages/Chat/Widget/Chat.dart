@@ -98,12 +98,20 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
       setState(() {
         allMessages = snapshot.docs;
         isLoading = false;
-      });
 
+        // Assign GlobalKeys for all messages
+        for (var message in allMessages) {
+          final messageID = message.id;
+          if (!messageKeys.containsKey(messageID)) {
+            messageKeys[messageID] = GlobalKey();
+            print("Assigned GlobalKey to messageID: $messageID");
+          }
+        }
+      });
       if (widget.initialMessageID != null) {
         jumpToMessageByIndex(widget.initialMessageID!);
       } else {
-        scrollToBottom(); // Scroll to bottom only if no specific message to jump to
+        scrollToBottom();
       }
     } catch (e) {
       print("Error fetching messages: $e");
@@ -147,42 +155,50 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
   }
 
   // Jump to a specific message based on the provided timestamp
-  void jumpToMessageByIndex(String messageID) {
-    if (!messageKeys.containsKey(messageID)) {
-      print("Message not found: $messageID");
-      return;
+void jumpToMessageByIndex(String messageID, {int maxRetries = 50, int delayMs = 100}) async {
+  int retryCount = 0;
+
+  while (retryCount < maxRetries) {
+    final key = messageKeys[messageID];
+    if (key != null && key.currentContext != null) {
+      final context = key.currentContext;
+      if (context != null) {
+        final box = context.findRenderObject() as RenderBox?;
+        if (box != null) {
+          final offset = box.localToGlobal(Offset.zero).dy +
+              _scrollController.offset -
+              (MediaQuery.of(context).size.height / 2); // Center the message
+
+          _scrollController.animateTo(
+            offset,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+
+          // Highlight the message
+          setState(() {
+            highlightedMessageID = messageID;
+          });
+
+          Future.delayed(const Duration(seconds: 2), () {
+            setState(() {
+              highlightedMessageID = null;
+            });
+          });
+
+          print("Successfully jumped to message ID: $messageID");
+          return; // Exit the loop once successful
+        }
+      }
     }
 
-    final key = messageKeys[messageID];
-    if (key == null) return;
-
-    final context = key.currentContext;
-    if (context == null) return;
-
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null) return;
-
-    final offset = box.localToGlobal(Offset.zero).dy +
-        _scrollController.offset -
-        (MediaQuery.of(context).size.height / 2); // Center the message
-
-    _scrollController.animateTo(
-      offset,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
-
-    // Highlight the message
-    setState(() {
-      highlightedMessageID = messageID;
-    });
-
-    Future.delayed(const Duration(seconds: 2), () {
-      setState(() {
-        highlightedMessageID = null;
-      });
-    });
+    retryCount++;
+    print("Context not found for message ID: $messageID. Retrying... ($retryCount/$maxRetries)");
+    await Future.delayed(Duration(milliseconds: delayMs));
   }
+
+  print("Failed to jump to message ID: $messageID after $maxRetries retries.");
+}
 
 
   Widget buildMessage(QueryDocumentSnapshot message, bool isHighlighted) {
@@ -605,6 +621,9 @@ class _ChatState extends State<Chat> with WidgetsBindingObserver {
           .collection('conversations')
           .doc(widget.conversationID)
           .collection('messages')
+          .where('isBlacklisted',
+              isEqualTo: false) // Exclude blacklisted messages
+
           .orderBy('timestamp', descending: false)
           .snapshots(),
       builder: (context, snapshot) {

@@ -4,17 +4,26 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:googleapis_auth/auth_io.dart' as auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class PushNotificationService {
   final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
   final FirebaseFirestore firestore = FirebaseFirestore.instance;
   String? userPhone;
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
 
   Future<void> initialize() async {
     // Request permissions
     await _firebaseMessaging.requestPermission();
 
+    await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      announcement: true,
+      badge: true,
+      sound: true,
+    );
     // Get the device token
     String? token = await _firebaseMessaging.getToken();
     print("Device Token: $token");
@@ -113,6 +122,9 @@ class PushNotificationService {
           'title': 'App Name',
           'body': message,
         },
+        'android': {
+          'priority': 'HIGH',
+        },
         'data': {}
       }
     };
@@ -163,24 +175,20 @@ class PushNotificationService {
         return;
       }
 
-      if (deviceToken != null) {
-        // Logic to determine the sender information
-        String senderInfo = senderName == "Unknown" ? senderPhone : senderName;
+      // Logic to determine the sender information
+      String senderInfo = senderName == "Unknown" ? senderPhone : senderName;
 
-        // Construct the notification title
-        String notificationTitle = "New Message from $senderInfo";
+      // Construct the notification title
+      String notificationTitle = "New Message from $senderInfo";
 
-        // Send the notification
-        await PushNotificationService.sendNotification(
-          deviceToken: deviceToken,
-          message: "$notificationTitle\n$messageContent",
-        );
+      // Send the notification
+      await PushNotificationService.sendNotification(
+        deviceToken: deviceToken,
+        message: "$notificationTitle\n$messageContent",
+      );
 
-        print("Notification sent successfully to user $smsUserID");
-      } else {
-        print("Device token not found for user $smsUserID");
-      }
-    } catch (error) {
+      print("Notification sent successfully to user $smsUserID");
+        } catch (error) {
       print("Error sending notification to user $smsUserID: $error");
     }
   }

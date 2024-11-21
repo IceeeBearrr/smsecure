@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:another_telephony/telephony.dart';
@@ -23,6 +24,14 @@ class CustomSmsMessage {
     required this.messageBody,
     required this.dateSent,
   });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'senderNumber': senderNumber,
+      'messageBody': messageBody,
+      'dateSent': dateSent,
+    };
+  }
 }
 
 Future<void> _initializeSmsListener() async {
@@ -158,53 +167,422 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
     if (isBlacklisted) {
       print("Sender is blacklisted for smsUserID: $smsUserID.");
 
-      // Check if the conversation exists
-      final conversationSnapshot =
-          await firestore.collection('conversations').doc(conversationID).get();
+      // Step 5: Apply custom filter logic
+      final words = message.messageBody
+          .split(RegExp(r'\s+'))
+          .map((word) => word.toLowerCase())
+          .toSet();
+      bool containsBlock = false;
+      bool containsAllow = false;
+      final Set<String> blockedKeywords = {};
+      final Set<String> allowedKeywords = {};
 
-      if (!conversationSnapshot.exists) {
-        print(
-            "Creating new blacklisted conversation with ID: $conversationID.");
-        await firestore.collection('conversations').doc(conversationID).set({
-          'participants': participants,
-          'smsUserID': smsUserID,
-          'lastMessageTimeStamp': Timestamp.now(),
-          'participantData': {
-            userPhone: {
-              'unreadCount': FieldValue.increment(1),
-              'lastReadTimestamp': null,
-            },
-            senderPhoneNumber: {
-              'unreadCount': 0,
-              'lastReadTimestamp': Timestamp.now(),
-            },
-          },
-          'isBlacklisted': true,
-          'isSpam': false,
-        });
-      } else if (conversationSnapshot.get('isBlacklisted') != true) {
-        print("Updating conversation to blacklisted for ID: $conversationID.");
-        await firestore
-            .collection('conversations')
-            .doc(conversationID)
-            .update({'isBlacklisted': true});
+      try {
+        final customFilterSnapshot = await firestore
+            .collection('customFilter')
+            .where('smsUserID', isEqualTo: smsUserID)
+            .get();
+
+        for (var doc in customFilterSnapshot.docs) {
+          final filterName = doc.get('filterName').toString().toLowerCase();
+          final filterType = doc
+              .get('criteria')
+              .toString()
+              .toLowerCase(); // "Allow" or "Block"
+
+          if (words.contains(filterName)) {
+            if (filterType == 'block') {
+              containsBlock = true;
+              blockedKeywords.add(filterName);
+              // Save the blocked keywords as a comma-separated string
+            } else if (filterType == 'allow') {
+              containsAllow = true;
+              allowedKeywords.add(filterName);
+            }
+          }
+        }
+      } catch (e) {
+        print("Error fetching custom filter criteria: $e");
       }
 
-      // Add the message to the blacklisted conversation
-      final messageID = '${message.dateSent}_$senderPhoneNumber';
-      await firestore
-          .collection('conversations')
-          .doc(conversationID)
-          .collection('messages')
-          .doc(messageID)
-          .set({
-        'messageID': messageID,
-        'senderID': senderPhoneNumber,
-        'content': message.messageBody,
-        'timestamp': Timestamp.fromMillisecondsSinceEpoch(message.dateSent),
-        'isIncoming': true,
-        'isBlacklisted': true,
-      }, SetOptions(merge: true));
+      if (containsBlock || (containsBlock && containsAllow)) {
+        print("Message blocked due to custom filter.");
+
+        // Convert blocked keywords to a comma-separated string
+        final keywordString = blockedKeywords.join(", ");
+        try {
+          String? senderName;
+
+          // Check in the user's contact collection
+          final contactSnapshot = await firestore
+              .collection('contact')
+              .where('smsUserID', isEqualTo: smsUserID)
+              .where('phoneNo', isEqualTo: senderPhoneNumber)
+              .get();
+
+          if (contactSnapshot.docs.isNotEmpty) {
+            senderName = contactSnapshot.docs.first.get('name');
+            for (var doc in contactSnapshot.docs) {
+              try {
+                await doc.reference
+                    .update({'isSpam': true, 'isBlacklisted': true});
+              } catch (e) {
+                print(
+                    "Error updating isSpam field for contact: ${doc.id}, Error: $e");
+              }
+            }
+          }
+
+          senderName ??= "Unknown";
+
+          // Step 4: Check if `spamContact` already exists
+          final spamContactQuery = await firestore
+              .collection('spamContact')
+              .where('smsUserID', isEqualTo: smsUserID)
+              .where('phoneNo', isEqualTo: senderPhoneNumber)
+              .get();
+
+          String spamContactID;
+
+          if (spamContactQuery.docs.isNotEmpty) {
+            // If `spamContact` exists, update `isRemoved` to false
+            final existingDoc = spamContactQuery.docs.first;
+            spamContactID = existingDoc.id;
+
+            await firestore
+                .collection('spamContact')
+                .doc(spamContactID)
+                .update({
+              'isRemoved': false,
+            });
+
+            print("Updated existing spamContact: $spamContactID");
+          } else {
+            // If no matching `spamContact`, create a new record
+            final newDoc = await firestore.collection('spamContact').add({
+              'smsUserID': smsUserID,
+              'phoneNo': senderPhoneNumber,
+              'name': senderName,
+              'isRemoved': false,
+            });
+            spamContactID = newDoc.id;
+
+            print("Created new spamContact: $spamContactID");
+          }
+
+          final spamMessageID =
+              '${message.dateSent}_${DateTime.now().millisecondsSinceEpoch}_$senderPhoneNumber';
+          await firestore
+              .collection('spamContact')
+              .doc(spamContactID)
+              .collection('spamMessages')
+              .doc(spamMessageID)
+              .set({
+            'spamMessageID': spamMessageID,
+            'messages': message.messageBody,
+            'keyword': keywordString,
+            'confidenceLevel': "100",
+            'detectedAt': Timestamp.now(),
+            'processingTime': 0,
+            'isRemoved': false,
+            'detectedDue': 'Custom Filter',
+          });
+
+          await firestore.collection('conversations').doc(conversationID).set({
+            'participants': participants,
+            'smsUserID': smsUserID,
+            'lastMessageTimeStamp': Timestamp.now(),
+            'participantData': {
+              userPhone: {
+                'unreadCount': FieldValue.increment(1),
+                'lastReadTimestamp': null,
+              },
+              senderPhoneNumber: {
+                'unreadCount': 0,
+                'lastReadTimestamp': Timestamp.now(),
+              },
+            },
+            'isSpam': true,
+            'isBlacklisted': true,
+          }, SetOptions(merge: true));
+
+          final messageID =
+              '${message.dateSent}_${DateTime.now().millisecondsSinceEpoch}_$senderPhoneNumber';
+          await firestore
+              .collection('conversations')
+              .doc(conversationID)
+              .collection('messages')
+              .doc(messageID)
+              .set({
+            'messageID': messageID,
+            'senderID': senderPhoneNumber,
+            'content': message.messageBody,
+            'timestamp': Timestamp.fromMillisecondsSinceEpoch(message.dateSent),
+            'isIncoming': true,
+            'isBlacklisted': true,
+          }, SetOptions(merge: true));
+
+          print("Message blacklisted have been saved as blocked custom filter");
+          return;
+        } catch (e) {
+          print("Error adding to spamContact collection: $e");
+        }
+      } else if (containsAllow) {
+        print("Message allowed due to custom filter.");
+        try {
+          final participants = [userPhone, senderPhoneNumber];
+          participants.sort();
+          final conversationID = participants.join('_');
+
+          final conversationSnapshot = await firestore
+              .collection('conversations')
+              .where('smsUserID', isEqualTo: smsUserID)
+              .where('participants', arrayContains: senderPhoneNumber)
+              .get();
+
+          if (conversationSnapshot.docs.isEmpty) {
+            await firestore
+                .collection('conversations')
+                .doc(conversationID)
+                .set({
+              'participants': participants,
+              'smsUserID': smsUserID,
+              'lastMessageTimeStamp': Timestamp.now(),
+              'participantData': {
+                userPhone: {
+                  'unreadCount': FieldValue.increment(1),
+                  'lastReadTimestamp': null,
+                },
+                senderPhoneNumber: {
+                  'unreadCount': 0,
+                  'lastReadTimestamp': Timestamp.now(),
+                },
+              },
+              'isBlacklisted': true,
+              'isSpam': false,
+            });
+          } else {
+            await firestore
+                .collection('conversations')
+                .doc(conversationID)
+                .update({
+              'lastMessageTimeStamp': Timestamp.now(),
+              'isBlacklisted': true,
+              'isSpam': false,
+            });
+          }
+
+          final messageID = '${message.dateSent}_$senderPhoneNumber';
+          await firestore
+              .collection('conversations')
+              .doc(conversationID)
+              .collection('messages')
+              .doc(messageID)
+              .set({
+            'messageID': messageID,
+            'senderID': senderPhoneNumber,
+            'content': message.messageBody,
+            'timestamp': Timestamp.fromMillisecondsSinceEpoch(message.dateSent),
+            'isIncoming': true,
+            'isBlacklisted': true,
+          }, SetOptions(merge: true));
+        } catch (e) {
+          print("Error adding message to conversations: $e");
+        }
+
+        String? senderName;
+
+        // Check in the user's contact collection
+        final contactSnapshot = await firestore
+            .collection('contact')
+            .where('smsUserID', isEqualTo: smsUserID)
+            .where('phoneNo', isEqualTo: senderPhoneNumber)
+            .get();
+
+        if (contactSnapshot.docs.isNotEmpty) {
+          senderName = contactSnapshot.docs.first.get('name');
+          for (var doc in contactSnapshot.docs) {
+            try {
+              await doc.reference
+                  .update({'isSpam': false, 'isBlacklisted': true});
+            } catch (e) {
+              print(
+                  "Error updating isSpam field for contact: ${doc.id}, Error: $e");
+            }
+          }
+        }
+        print("Message blacklisted have been saved as allow custom filter");
+        return;
+      }
+
+      // Perform spam detection for non-whitelisted and non-blacklisted users
+      final predictionRequest = {
+        'message': message.messageBody,
+        'senderPhone': senderPhoneNumber,
+        'chosenPredictionModel': chosenPredictionModel,
+      };
+
+      try {
+        print("Attempting connection to: http://192.168.101.80:5000");
+        final response = await http.post(
+          Uri.parse('http://192.168.101.80:5000/predict'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(predictionRequest),
+        );
+
+        print("Server test response: ${response.statusCode}");
+        print("Prediction API response body: ${response.body}");
+
+        if (response.statusCode != 200) {
+          print("Error: Non-200 response from Flask API");
+          print("Response: ${response.body}");
+        }
+
+        if (response.statusCode == 200) {
+          final predictionResult = json.decode(response.body);
+          if (!predictionResult.containsKey('isSpam')) {
+            print(
+                "Error: Invalid API response format. Missing 'isSpam' field.");
+            return;
+          }
+          bool isSpam = predictionResult['isSpam'] ?? false;
+          String? keyword = predictionResult['keyword'];
+          double confidenceLevel =
+              (predictionResult['confidenceLevel'] ?? 0.0).toDouble();
+          double processingTime =
+              (predictionResult['processingTime'] ?? 0.0).toDouble();
+
+          print(
+              "Debug: Spam Detection - Is Spam: $isSpam, Keyword: $keyword, Confidence Level: $confidenceLevel");
+
+          if (isSpam) {
+            print("Adding to spamContact collection.");
+            try {
+              String? senderName;
+
+              // Check in the user's contact collection
+              final contactSnapshot = await firestore
+                  .collection('contact')
+                  .where('smsUserID', isEqualTo: smsUserID)
+                  .where('phoneNo', isEqualTo: senderPhoneNumber)
+                  .get();
+
+              if (contactSnapshot.docs.isNotEmpty) {
+                senderName = contactSnapshot.docs.first.get('name');
+                for (var doc in contactSnapshot.docs) {
+                  try {
+                    await doc.reference
+                        .update({'isSpam': true, 'isBlacklisted': true});
+                  } catch (e) {
+                    print(
+                        "Error updating isSpam field for contact: ${doc.id}, Error: $e");
+                  }
+                }
+              }
+
+              senderName ??= "Unknown";
+
+              // Step 4: Check if `spamContact` already exists
+              final spamContactQuery = await firestore
+                  .collection('spamContact')
+                  .where('smsUserID', isEqualTo: smsUserID)
+                  .where('phoneNo', isEqualTo: senderPhoneNumber)
+                  .get();
+
+              String spamContactID;
+
+              if (spamContactQuery.docs.isNotEmpty) {
+                // If `spamContact` exists, update `isRemoved` to false
+                final existingDoc = spamContactQuery.docs.first;
+                spamContactID = existingDoc.id;
+
+                await firestore
+                    .collection('spamContact')
+                    .doc(spamContactID)
+                    .update({
+                  'isRemoved': false,
+                });
+
+                print("Updated existing spamContact: $spamContactID");
+              } else {
+                // If no matching `spamContact`, create a new record
+                final newDoc = await firestore.collection('spamContact').add({
+                  'smsUserID': smsUserID,
+                  'phoneNo': senderPhoneNumber,
+                  'name': senderName,
+                  'isRemoved': false,
+                });
+                spamContactID = newDoc.id;
+
+                print("Created new spamContact: $spamContactID");
+              }
+
+              final spamMessageID =
+                  '${message.dateSent}_${DateTime.now().millisecondsSinceEpoch}_$senderPhoneNumber';
+              await firestore
+                  .collection('spamContact')
+                  .doc(spamContactID)
+                  .collection('spamMessages')
+                  .doc(spamMessageID)
+                  .set({
+                'spamMessageID': spamMessageID,
+                'messages': message.messageBody,
+                'keyword': keyword,
+                'confidenceLevel': confidenceLevel.toStringAsFixed(4),
+                'detectedAt': Timestamp.now(),
+                'processingTime': processingTime,
+                'isRemoved': false,
+                'detectedDue': chosenPredictionModel,
+              });
+
+              await firestore
+                  .collection('conversations')
+                  .doc(conversationID)
+                  .set({
+                'participants': participants,
+                'smsUserID': smsUserID,
+                'lastMessageTimeStamp': Timestamp.now(),
+                'participantData': {
+                  userPhone: {
+                    'unreadCount': FieldValue.increment(1),
+                    'lastReadTimestamp': null,
+                  },
+                  senderPhoneNumber: {
+                    'unreadCount': 0,
+                    'lastReadTimestamp': Timestamp.now(),
+                  },
+                },
+                'isSpam': true,
+                'isBlacklisted': true,
+              }, SetOptions(merge: true));
+
+              final messageID =
+                  '${message.dateSent}_${DateTime.now().millisecondsSinceEpoch}_$senderPhoneNumber';
+              await firestore
+                  .collection('conversations')
+                  .doc(conversationID)
+                  .collection('messages')
+                  .doc(messageID)
+                  .set({
+                'messageID': messageID,
+                'senderID': senderPhoneNumber,
+                'content': message.messageBody,
+                'timestamp':
+                    Timestamp.fromMillisecondsSinceEpoch(message.dateSent),
+                'isIncoming': true,
+                'isBlacklisted': true,
+              }, SetOptions(merge: true));
+
+              print("when blacklist this person he sent spam message");
+              return;
+            } catch (e) {
+              print("Error adding to spamContact collection: $e");
+            }
+          }
+        }
+      } catch (e) {
+        print("HTTP request error during spam detection: $e");
+      }
 
       return; // Exit as the sender is blacklisted
     }
@@ -358,6 +736,26 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
           'isBlacklisted': false,
         }, SetOptions(merge: true));
 
+        // Step 4: Check if sender is already in spamContact collection with isRemoved = false
+        final spamContactSnapshot = await firestore
+            .collection('spamContact')
+            .where('smsUserID', isEqualTo: smsUserID)
+            .where('phoneNo', isEqualTo: senderPhoneNumber)
+            .where('isRemoved', isEqualTo: false)
+            .get();
+
+        if (spamContactSnapshot.docs.isNotEmpty) {
+          print("Message blocked by Smsecure for sender: $senderPhoneNumber");
+          PushNotificationService.sendNotificationToUser(
+            smsUserID: smsUserID,
+            senderName: senderName,
+            senderPhone: senderPhoneNumber,
+            messageContent:
+                "Message from $senderPhoneNumber blocked by Smsecure. It is now in the quarantine folder.",
+          );
+
+          return;
+        }
         PushNotificationService.sendNotificationToUser(
           smsUserID: smsUserID,
           senderName: senderName,
@@ -365,7 +763,6 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
           messageContent:
               "Message blocked from $senderPhoneNumber using Custom Filter. It is now in the quarantine folder.",
         );
-
         return;
       } catch (e) {
         print("Error adding to spamContact collection: $e");
@@ -442,7 +839,7 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
         senderName = contactSnapshot.docs.first.get('name');
         for (var doc in contactSnapshot.docs) {
           try {
-            await doc.reference.update({'isSpam': true});
+            await doc.reference.update({'isSpam': false});
           } catch (e) {
             print(
                 "Error updating isSpam field for contact: ${doc.id}, Error: $e");
@@ -452,6 +849,26 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
 
       senderName ??= "Unknown";
 
+      // Step 4: Check if sender is already in spamContact collection with isRemoved = false
+      final spamContactSnapshot = await firestore
+          .collection('spamContact')
+          .where('smsUserID', isEqualTo: smsUserID)
+          .where('phoneNo', isEqualTo: senderPhoneNumber)
+          .where('isRemoved', isEqualTo: false)
+          .get();
+
+      if (spamContactSnapshot.docs.isNotEmpty) {
+        print("Message blocked by Smsecure for sender: $senderPhoneNumber");
+        PushNotificationService.sendNotificationToUser(
+          smsUserID: smsUserID,
+          senderName: senderName,
+          senderPhone: senderPhoneNumber,
+          messageContent:
+              "Message from $senderPhoneNumber blocked by Smsecure. It is now in the quarantine folder.",
+        );
+
+        return;
+      }
       PushNotificationService.sendNotificationToUser(
         smsUserID: smsUserID,
         senderName: senderName,
@@ -470,13 +887,14 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
     };
 
     try {
+      print("Attempting connection to: http://192.168.101.80:5000");
       final response = await http.post(
-        Uri.parse('http://192.168.6.243:5000/predict'),
+        Uri.parse('http://192.168.101.80:5000/predict'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(predictionRequest),
       );
 
-      print("Prediction API response status: ${response.statusCode}");
+      print("Server test response: ${response.statusCode}");
       print("Prediction API response body: ${response.body}");
 
       if (response.statusCode != 200) {
@@ -617,6 +1035,27 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
               'isBlacklisted': false,
             }, SetOptions(merge: true));
 
+            // Step 4: Check if sender is already in spamContact collection with isRemoved = false
+            final spamContactSnapshot = await firestore
+                .collection('spamContact')
+                .where('smsUserID', isEqualTo: smsUserID)
+                .where('phoneNo', isEqualTo: senderPhoneNumber)
+                .where('isRemoved', isEqualTo: false)
+                .get();
+
+            if (spamContactSnapshot.docs.isNotEmpty) {
+              print(
+                  "Message blocked by Smsecure for sender: $senderPhoneNumber");
+              PushNotificationService.sendNotificationToUser(
+                smsUserID: smsUserID,
+                senderName: senderName,
+                senderPhone: senderPhoneNumber,
+                messageContent:
+                    "Message from $senderPhoneNumber blocked by Smsecure. It is now in the quarantine folder.",
+              );
+
+              return;
+            }
             PushNotificationService.sendNotificationToUser(
               smsUserID: smsUserID,
               senderName: senderName, // Will use senderPhone instead
@@ -624,7 +1063,6 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
               messageContent:
                   "New spam detected from $senderPhoneNumber using $chosenPredictionModel. It is now in the quarantine folder.",
             );
-
             return;
           } catch (e) {
             print("Error adding to spamContact collection: $e");
@@ -655,7 +1093,7 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
       senderName = contactSnapshot.docs.first.get('name');
       for (var doc in contactSnapshot.docs) {
         try {
-          await doc.reference.update({'isSpam': true});
+          await doc.reference.update({'isSpam': false});
         } catch (e) {
           print(
               "Error updating isSpam field for contact: ${doc.id}, Error: $e");
@@ -710,12 +1148,33 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
       'isBlacklisted': false,
     }, SetOptions(merge: true));
 
+    // Step 4: Check if sender is already in spamContact collection with isRemoved = false
+    final spamContactSnapshot = await firestore
+        .collection('spamContact')
+        .where('smsUserID', isEqualTo: smsUserID)
+        .where('phoneNo', isEqualTo: senderPhoneNumber)
+        .where('isRemoved', isEqualTo: false)
+        .get();
+
+    if (spamContactSnapshot.docs.isNotEmpty) {
+      print("Message blocked by Smsecure for sender: $senderPhoneNumber");
+      PushNotificationService.sendNotificationToUser(
+        smsUserID: smsUserID,
+        senderName: senderName,
+        senderPhone: senderPhoneNumber,
+        messageContent:
+            "Message from $senderPhoneNumber blocked by Smsecure. It is now in the quarantine folder.",
+      );
+
+      return;
+    }
     PushNotificationService.sendNotificationToUser(
       smsUserID: smsUserID,
       senderName: senderName, // Will use senderPhone instead
       senderPhone: senderPhoneNumber,
       messageContent: message.messageBody,
     );
+    return;
   } catch (e) {
     print("Error adding message to conversations: $e");
   }
@@ -771,6 +1230,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _initialize();
     _initializeSmsListener();
     _fetchStats();
+
+    // Listen for foreground messages
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (message.notification != null) {
+        print(
+            'Foreground notification received: ${message.notification?.title}');
+        // Handle the notification (e.g., show a dialog or update the UI)
+      }
+    });
+
+    // Optional: Handle message taps (background or terminated state)
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      print('Notification opened: ${message.notification?.title}');
+      // Navigate to a specific screen or perform any action
+    });
 
     final pushNotificationService = PushNotificationService();
     pushNotificationService.getDeviceToken().then((deviceToken) {

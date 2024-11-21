@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="com.smsecure.app">
 
     <!-- Permissions -->
@@ -23,15 +24,15 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
-
-
     <application
         android:label="smsecure"
         android:requestLegacyExternalStorage="true"
         android:name=".MainApplication"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="true"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config">
 
         <!-- MainActivity configuration -->
         <activity
@@ -81,7 +82,10 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-
+            
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="high_importance_channel" />
         <!-- SMS Receiver -->
         <receiver
             android:name=".SmsReceiver"
@@ -120,6 +124,15 @@
         </service>
 
         <service android:name=".SmsService" />
+
+        <service
+            android:name="io.flutter.plugins.firebase.messaging.FlutterFirebaseMessagingService"
+            android:exported="true"
+            tools:replace="android:exported">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT"/>
+            </intent-filter>
+        </service>
 
 
     </application>

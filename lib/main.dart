@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:smsecure/Pages/BlacklistContact/BlacklistPage.dart';
@@ -26,8 +27,17 @@ void main() async {
     initialRoute = '/home';
   }
 
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
   runApp(MyApp(initialRoute: initialRoute));
 }
+
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // Handle the background message
+  print('Handling a background message: ${message.messageId}');
+}
+
+
 
 class MyApp extends StatelessWidget {
   final String initialRoute;
