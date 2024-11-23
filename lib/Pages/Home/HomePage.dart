@@ -11,6 +11,7 @@ import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:http/http.dart' as http;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:smsecure/Pages/Home/push_notification_service.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 const MethodChannel smsChannel = MethodChannel("com.smsecure.app/sms");
 
@@ -751,7 +752,13 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
             senderName: senderName,
             senderPhone: senderPhoneNumber,
             messageContent:
-                "Message from $senderPhoneNumber blocked by Smsecure. It is now in the quarantine folder.",
+                "Message from $senderName blocked by Smsecure. It is now in the quarantine folder.",
+          );
+          // Trigger a local notification for the foreground
+          PushNotificationService.sendForegroundNotification(
+            title: "Message Blocked",
+            body:
+                "Message from $senderName blocked by Smsecure. It is now in the quarantine folder.",
           );
 
           return;
@@ -761,7 +768,13 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
           senderName: senderName,
           senderPhone: senderPhoneNumber,
           messageContent:
-              "Message blocked from $senderPhoneNumber using Custom Filter. It is now in the quarantine folder.",
+              "Message blocked from $senderName using Custom Filter. It is now in the quarantine folder.",
+        );
+        // Trigger a local notification for the foreground
+        PushNotificationService.sendForegroundNotification(
+          title: "Message Blocked",
+          body:
+              "Message blocked from $senderName using Custom Filter. It is now in the quarantine folder.",
         );
         return;
       } catch (e) {
@@ -864,7 +877,13 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
           senderName: senderName,
           senderPhone: senderPhoneNumber,
           messageContent:
-              "Message from $senderPhoneNumber blocked by Smsecure. It is now in the quarantine folder.",
+              "Message from $senderName blocked by Smsecure. It is now in the quarantine folder.",
+        );
+
+        PushNotificationService.sendForegroundNotification(
+          title: "Message Blocked",
+          body:
+              "Message from $senderName blocked by Smsecure. It is now in the quarantine folder.",
         );
 
         return;
@@ -875,6 +894,11 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
         senderPhone: senderPhoneNumber,
         messageContent:
             "${message.messageBody} (Message is allowed due to Custom Filter)",
+      );
+      
+      PushNotificationService.sendForegroundNotification(
+        title: senderName,
+        body: "${message.messageBody} (Message is allowed due to Custom Filter",
       );
       return;
     }
@@ -1051,7 +1075,13 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
                 senderName: senderName,
                 senderPhone: senderPhoneNumber,
                 messageContent:
-                    "Message from $senderPhoneNumber blocked by Smsecure. It is now in the quarantine folder.",
+                    "Message from $senderName blocked by Smsecure. It is now in the quarantine folder.",
+              );
+
+              PushNotificationService.sendForegroundNotification(
+                title: senderName,
+                body:
+                    "Message from $senderName blocked by Smsecure. It is now in the quarantine folder.",
               );
 
               return;
@@ -1061,7 +1091,12 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
               senderName: senderName, // Will use senderPhone instead
               senderPhone: senderPhoneNumber,
               messageContent:
-                  "New spam detected from $senderPhoneNumber using $chosenPredictionModel. It is now in the quarantine folder.",
+                  "New spam detected from $senderName using $chosenPredictionModel. It is now in the quarantine folder.",
+            );
+            PushNotificationService.sendForegroundNotification(
+              title: senderName,
+              body:
+                  "New spam detected from $senderName using $chosenPredictionModel. It is now in the quarantine folder.",
             );
             return;
           } catch (e) {
@@ -1163,9 +1198,13 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
         senderName: senderName,
         senderPhone: senderPhoneNumber,
         messageContent:
-            "Message from $senderPhoneNumber blocked by Smsecure. It is now in the quarantine folder.",
+            "Message from $senderName blocked by Smsecure. It is now in the quarantine folder.",
       );
-
+      PushNotificationService.sendForegroundNotification(
+        title: senderName,
+        body:
+            "Message from $senderName blocked by Smsecure. It is now in the quarantine folder.",
+      );
       return;
     }
     PushNotificationService.sendNotificationToUser(
@@ -1173,6 +1212,10 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
       senderName: senderName, // Will use senderPhone instead
       senderPhone: senderPhoneNumber,
       messageContent: message.messageBody,
+    );
+    PushNotificationService.sendForegroundNotification(
+      title: senderName,
+      body: message.messageBody,
     );
     return;
   } catch (e) {
@@ -1214,6 +1257,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final FirebaseFirestore firestore = FirebaseFirestore.instance;
   final PushNotificationService _pushNotificationService =
       PushNotificationService();
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
 
   bool _permissionsGranted = false;
   bool _isLoading = true;
@@ -1229,6 +1274,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _initialize();
     _initializeSmsListener();
+    _setupFirebaseForegroundHandler();
+    _initializeLocalNotifications();
     _fetchStats();
 
     // Listen for foreground messages
@@ -1254,6 +1301,52 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         print("Failed to retrieve device token.");
       }
     });
+  }
+
+  void _initializeLocalNotifications() {
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings initializationSettings =
+        InitializationSettings(android: initializationSettingsAndroid);
+
+    flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  }
+
+  void _setupFirebaseForegroundHandler() {
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (message.notification != null) {
+        print(
+            'Foreground notification received: ${message.notification?.title}');
+        _showLocalNotification(message.notification);
+      }
+    });
+
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      print('Notification tapped: ${message.notification?.title}');
+      // Handle what happens when the user taps on the notification
+    });
+  }
+
+  Future<void> _showLocalNotification(RemoteNotification? notification) async {
+    if (notification == null) return;
+
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      'foreground_channel', // Channel ID
+      'Foreground Notifications', // Channel Name
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+
+    const NotificationDetails notificationDetails =
+        NotificationDetails(android: androidDetails);
+
+    await flutterLocalNotificationsPlugin.show(
+      notification.hashCode,
+      notification.title,
+      notification.body,
+      notificationDetails,
+    );
   }
 
   @override

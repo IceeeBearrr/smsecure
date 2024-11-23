@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:smsecure/Pages/BlacklistContact/BlacklistPage.dart';
 import 'package:smsecure/Pages/Home/HomePage.dart';
+import 'package:smsecure/Pages/Home/push_notification_service.dart';
 import 'package:smsecure/Pages/Login/CustLogin.dart';
 import 'package:smsecure/Pages/Messages/Messages.dart';
 import 'package:smsecure/Pages/QuarantineFolder/QuarantineFolderPage.dart';
@@ -28,7 +29,7 @@ void main() async {
   }
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
+  await PushNotificationService.initializeLocalNotifications();
   runApp(MyApp(initialRoute: initialRoute));
 }
 

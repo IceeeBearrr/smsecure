@@ -11,8 +11,18 @@ class PushNotificationService {
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
   final FirebaseFirestore firestore = FirebaseFirestore.instance;
   String? userPhone;
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+  static final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
+
+  static Future<void> initializeLocalNotifications() async {
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const InitializationSettings initializationSettings =
+        InitializationSettings(android: initializationSettingsAndroid);
+
+    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  }
 
   Future<void> initialize() async {
     // Request permissions
@@ -188,8 +198,32 @@ class PushNotificationService {
       );
 
       print("Notification sent successfully to user $smsUserID");
-        } catch (error) {
+    } catch (error) {
       print("Error sending notification to user $smsUserID: $error");
     }
+  }
+
+  static Future<void> sendForegroundNotification({
+    required String title,
+    required String body,
+  }) async {
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      'foreground_channel', // Channel ID
+      'Foreground Notifications', // Channel Name
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+
+    const NotificationDetails notificationDetails =
+        NotificationDetails(android: androidDetails);
+
+    await flutterLocalNotificationsPlugin.show(
+      DateTime.now().millisecondsSinceEpoch ~/
+          1000, // Unique ID for the notification
+      title,
+      body,
+      notificationDetails,
+    );
   }
 }
