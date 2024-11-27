@@ -25,18 +25,51 @@ class _BidirectionalLSTMPageState extends State<BidirectionalLSTMPage> {
 
   Future<void> fetchLSTMMetrics() async {
     try {
-      final collection = FirebaseFirestore.instance.collection('model_metrics');
-      final snapshot =
-          await collection.where('name', isEqualTo: 'Bidirectional LSTM').get();
+      final firestore = FirebaseFirestore.instance;
 
-      if (snapshot.docs.isNotEmpty) {
+      // Check if the Bidirectional LSTM model exists
+      final modelQuery = await firestore
+          .collection('predictionModel')
+          .where('name', isEqualTo: 'Bidirectional LSTM')
+          .get();
+
+      String modelDocID;
+
+      if (modelQuery.docs.isNotEmpty) {
+        modelDocID = modelQuery.docs.first.id;
+      } else {
+        // Create a new document for the model if it doesn't exist
+        final newModelDoc = await firestore
+            .collection('predictionModel')
+            .add({'name': 'Bidirectional LSTM'});
+        modelDocID = newModelDoc.id;
+      }
+
+      // Fetch the most recent metrics from the `Metrics` subcollection
+      final metricsQuery = await firestore
+          .collection('predictionModel')
+          .doc(modelDocID)
+          .collection('Metrics')
+          .orderBy('timestamp', descending: true)
+          .limit(1)
+          .get();
+
+      if (metricsQuery.docs.isNotEmpty) {
         setState(() {
-          lstmMetrics = snapshot.docs.first.data();
+          lstmMetrics = metricsQuery.docs.first.data();
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          lstmMetrics = null;
           isLoading = false;
         });
       }
     } catch (e) {
       print('Error fetching LSTM metrics: $e');
+      setState(() {
+        isLoading = false;
+      });
     }
   }
 
@@ -62,9 +95,9 @@ class _BidirectionalLSTMPageState extends State<BidirectionalLSTMPage> {
         return;
       }
 
-      // Retrieve smsUser record from Firestore
       final smsUserCollection = FirebaseFirestore.instance.collection('smsUser');
-      final smsUserSnapshot = await smsUserCollection.where('phoneNo', isEqualTo: userPhone).get();
+      final smsUserSnapshot =
+          await smsUserCollection.where('phoneNo', isEqualTo: userPhone).get();
 
       if (smsUserSnapshot.docs.isEmpty) {
         showDialog(
@@ -89,7 +122,6 @@ class _BidirectionalLSTMPageState extends State<BidirectionalLSTMPage> {
       final smsUserDocRef = smsUserCollection.doc(smsUserID);
       final smsUserData = smsUserSnapshot.docs.first.data();
 
-      // Check if the model is already selected
       if (smsUserData['selectedModel'] == 'Bidirectional LSTM') {
         showDialog(
           context: context,
@@ -107,7 +139,6 @@ class _BidirectionalLSTMPageState extends State<BidirectionalLSTMPage> {
           ),
         );
       } else {
-        // Update the selected model in smsUser collection
         await smsUserDocRef.update({'selectedModel': 'Bidirectional LSTM'});
 
         showDialog(
@@ -146,9 +177,6 @@ class _BidirectionalLSTMPageState extends State<BidirectionalLSTMPage> {
     }
   }
 
-
-
-
   Widget buildDecodedImage(String base64String) {
     try {
       final Uint8List decodedBytes = base64Decode(base64String);
@@ -167,6 +195,7 @@ class _BidirectionalLSTMPageState extends State<BidirectionalLSTMPage> {
       );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

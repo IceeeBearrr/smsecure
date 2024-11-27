@@ -25,18 +25,51 @@ class _LinearSVMPageState extends State<LinearSVMPage> {
 
   Future<void> fetchSVMMetrics() async {
     try {
-      final collection = FirebaseFirestore.instance.collection('model_metrics');
-      final snapshot =
-          await collection.where('name', isEqualTo: 'Linear SVM').get();
+      final firestore = FirebaseFirestore.instance;
 
-      if (snapshot.docs.isNotEmpty) {
+      // Check if the Linear SVM model exists
+      final modelQuery = await firestore
+          .collection('predictionModel')
+          .where('name', isEqualTo: 'Linear SVM')
+          .get();
+
+      String modelDocID;
+
+      if (modelQuery.docs.isNotEmpty) {
+        modelDocID = modelQuery.docs.first.id;
+      } else {
+        // Create a new document for the model if it doesn't exist
+        final newModelDoc = await firestore
+            .collection('predictionModel')
+            .add({'name': 'Linear SVM'});
+        modelDocID = newModelDoc.id;
+      }
+
+      // Fetch the most recent metrics from the `Metrics` subcollection
+      final metricsQuery = await firestore
+          .collection('predictionModel')
+          .doc(modelDocID)
+          .collection('Metrics')
+          .orderBy('timestamp', descending: true)
+          .limit(1)
+          .get();
+
+      if (metricsQuery.docs.isNotEmpty) {
         setState(() {
-          svmMetrics = snapshot.docs.first.data();
+          svmMetrics = metricsQuery.docs.first.data();
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          svmMetrics = null;
           isLoading = false;
         });
       }
     } catch (e) {
       print('Error fetching SVM metrics: $e');
+      setState(() {
+        isLoading = false;
+      });
     }
   }
 
@@ -62,16 +95,18 @@ class _LinearSVMPageState extends State<LinearSVMPage> {
         return;
       }
 
-      // Retrieve smsUser record from Firestore
-      final smsUserCollection = FirebaseFirestore.instance.collection('smsUser');
-      final smsUserSnapshot = await smsUserCollection.where('phoneNo', isEqualTo: userPhone).get();
+      final smsUserCollection =
+          FirebaseFirestore.instance.collection('smsUser');
+      final smsUserSnapshot =
+          await smsUserCollection.where('phoneNo', isEqualTo: userPhone).get();
 
       if (smsUserSnapshot.docs.isEmpty) {
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Error'),
-            content: const Text('smsUser not found for the provided phone number.'),
+            content:
+                const Text('smsUser not found for the provided phone number.'),
             actions: [
               TextButton(
                 onPressed: () {
@@ -89,13 +124,13 @@ class _LinearSVMPageState extends State<LinearSVMPage> {
       final smsUserDocRef = smsUserCollection.doc(smsUserID);
       final smsUserData = smsUserSnapshot.docs.first.data();
 
-      // Check if the model is already selected
       if (smsUserData['selectedModel'] == 'Linear SVM') {
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Info'),
-            content: const Text('You have already selected the Linear SVM model.'),
+            content:
+                const Text('You have already selected the Linear SVM model.'),
             actions: [
               TextButton(
                 onPressed: () {
@@ -107,7 +142,6 @@ class _LinearSVMPageState extends State<LinearSVMPage> {
           ),
         );
       } else {
-        // Update the selected model in smsUser collection
         await smsUserDocRef.update({'selectedModel': 'Linear SVM'});
 
         showDialog(
@@ -235,7 +269,8 @@ class _LinearSVMPageState extends State<LinearSVMPage> {
                     ),
                     Padding(
                       padding: const EdgeInsets.all(8.0),
-                      child: Text('${(svmMetrics!['trainAccuracy'] * 100).toStringAsFixed(2)}%'),
+                      child: Text(
+                          '${(svmMetrics!['trainAccuracy'] * 100).toStringAsFixed(2)}%'),
                     ),
                   ],
                 ),
@@ -248,7 +283,8 @@ class _LinearSVMPageState extends State<LinearSVMPage> {
                     ),
                     Padding(
                       padding: const EdgeInsets.all(8.0),
-                      child: Text('${(svmMetrics!['testAccuracy'] * 100).toStringAsFixed(2)}%'),
+                      child: Text(
+                          '${(svmMetrics!['testAccuracy'] * 100).toStringAsFixed(2)}%'),
                     ),
                   ],
                 ),
@@ -261,7 +297,8 @@ class _LinearSVMPageState extends State<LinearSVMPage> {
                     ),
                     Padding(
                       padding: const EdgeInsets.all(8.0),
-                      child: Text('${(svmMetrics!['testPrecision'] * 100).toStringAsFixed(2)}%'),
+                      child: Text(
+                          '${(svmMetrics!['testPrecision'] * 100).toStringAsFixed(2)}%'),
                     ),
                   ],
                 ),
@@ -274,7 +311,8 @@ class _LinearSVMPageState extends State<LinearSVMPage> {
                     ),
                     Padding(
                       padding: const EdgeInsets.all(8.0),
-                      child: Text('${(svmMetrics!['testRecall'] * 100).toStringAsFixed(2)}%'),
+                      child: Text(
+                          '${(svmMetrics!['testRecall'] * 100).toStringAsFixed(2)}%'),
                     ),
                   ],
                 ),
@@ -312,7 +350,6 @@ class _LinearSVMPageState extends State<LinearSVMPage> {
                   TextSpan(
                       text:
                           'Indicates how well the model identifies all spam messages from the dataset.'),
-
                 ],
               ),
               textAlign: TextAlign.justify,
@@ -333,7 +370,7 @@ class _LinearSVMPageState extends State<LinearSVMPage> {
               'Learning Curve:',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            buildDecodedImage(svmMetrics!['learningCurve']),
+            buildDecodedImage(svmMetrics!['accuracyCurve']),
             const SizedBox(height: 8),
             const Text(
               'The learning curve is a graph that shows how a models performance improves over time or with more training data, helping to assess its learning progress and identify overfitting or underfitting.\n\nA good learning curve shows steady improvement with the training and validation lines getting closer, indicating the model learns well without overfitting or underfitting.',

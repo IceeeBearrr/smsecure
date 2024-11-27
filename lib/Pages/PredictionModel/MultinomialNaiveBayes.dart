@@ -13,8 +13,7 @@ class MultinomialNaiveBayesPage extends StatefulWidget {
       _MultinomialNaiveBayesPageState();
 }
 
-class _MultinomialNaiveBayesPageState
-    extends State<MultinomialNaiveBayesPage> {
+class _MultinomialNaiveBayesPageState extends State<MultinomialNaiveBayesPage> {
   Map<String, dynamic>? nbMetrics;
   bool isLoading = true;
   final storage = const FlutterSecureStorage();
@@ -27,18 +26,51 @@ class _MultinomialNaiveBayesPageState
 
   Future<void> fetchNBMetrics() async {
     try {
-      final collection = FirebaseFirestore.instance.collection('model_metrics');
-      final snapshot =
-          await collection.where('name', isEqualTo: 'Multinomial NB').get();
+      final firestore = FirebaseFirestore.instance;
 
-      if (snapshot.docs.isNotEmpty) {
+      // Check if the Multinomial NB model exists
+      final modelQuery = await firestore
+          .collection('predictionModel')
+          .where('name', isEqualTo: 'Multinomial NB')
+          .get();
+
+      String modelDocID;
+
+      if (modelQuery.docs.isNotEmpty) {
+        modelDocID = modelQuery.docs.first.id;
+      } else {
+        // Create a new document for the model if it doesn't exist
+        final newModelDoc = await firestore
+            .collection('predictionModel')
+            .add({'name': 'Multinomial NB'});
+        modelDocID = newModelDoc.id;
+      }
+
+      // Fetch the most recent metrics from the `Metrics` subcollection
+      final metricsQuery = await firestore
+          .collection('predictionModel')
+          .doc(modelDocID)
+          .collection('Metrics')
+          .orderBy('timestamp', descending: true)
+          .limit(1)
+          .get();
+
+      if (metricsQuery.docs.isNotEmpty) {
         setState(() {
-          nbMetrics = snapshot.docs.first.data();
+          nbMetrics = metricsQuery.docs.first.data();
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          nbMetrics = null;
           isLoading = false;
         });
       }
     } catch (e) {
       print('Error fetching Naive Bayes metrics: $e');
+      setState(() {
+        isLoading = false;
+      });
     }
   }
 
@@ -64,7 +96,6 @@ class _MultinomialNaiveBayesPageState
         return;
       }
 
-      // Retrieve smsUser record from Firestore
       final smsUserCollection =
           FirebaseFirestore.instance.collection('smsUser');
       final smsUserSnapshot =
@@ -75,8 +106,8 @@ class _MultinomialNaiveBayesPageState
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Error'),
-            content: const Text(
-                'smsUser not found for the provided phone number.'),
+            content:
+                const Text('smsUser not found for the provided phone number.'),
             actions: [
               TextButton(
                 onPressed: () {
@@ -94,7 +125,6 @@ class _MultinomialNaiveBayesPageState
       final smsUserDocRef = smsUserCollection.doc(smsUserID);
       final smsUserData = smsUserSnapshot.docs.first.data();
 
-      // Check if the model is already selected
       if (smsUserData['selectedModel'] == 'Multinomial NB') {
         showDialog(
           context: context,
@@ -113,15 +143,13 @@ class _MultinomialNaiveBayesPageState
           ),
         );
       } else {
-        // Update the selected model in smsUser collection
         await smsUserDocRef.update({'selectedModel': 'Multinomial NB'});
 
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Success'),
-            content: const Text(
-                'Prediction model updated to Multinomial NB.'),
+            content: const Text('Prediction model updated to Multinomial NB.'),
             actions: [
               TextButton(
                 onPressed: () {
@@ -324,7 +352,6 @@ class _MultinomialNaiveBayesPageState
                   TextSpan(
                       text:
                           'Indicates how well the model identifies all spam messages from the dataset.'),
-
                 ],
               ),
               textAlign: TextAlign.justify,
@@ -345,7 +372,7 @@ class _MultinomialNaiveBayesPageState
               'Learning Curve:',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            buildDecodedImage(nbMetrics!['learningCurve']),
+            buildDecodedImage(nbMetrics!['accuracyCurve']),
             const SizedBox(height: 8),
             const Text(
               'The learning curve is a graph that shows how a models performance improves over time or with more training data, helping to assess its learning progress and identify overfitting or underfitting.\n\nA good learning curve shows steady improvement with the training and validation lines getting closer, indicating the model learns well without overfitting or underfitting.',
@@ -387,4 +414,3 @@ class _MultinomialNaiveBayesPageState
     );
   }
 }
-

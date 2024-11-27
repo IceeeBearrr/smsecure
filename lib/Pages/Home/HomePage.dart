@@ -424,9 +424,9 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
       };
 
       try {
-        print("Attempting connection to: http://192.168.101.80:5000");
+        print("Attempting connection to: http://172.20.10.2:5000");
         final response = await http.post(
-          Uri.parse('http://192.168.101.80:5000/predict'),
+          Uri.parse('http://172.20.10.2:5000/predict'),
           headers: {'Content-Type': 'application/json'},
           body: json.encode(predictionRequest),
         );
@@ -911,9 +911,9 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
     };
 
     try {
-      print("Attempting connection to: http://192.168.101.80:5000");
+      print("Attempting connection to: http://172.20.10.2:5000");
       final response = await http.post(
-        Uri.parse('http://192.168.101.80:5000/predict'),
+        Uri.parse('http://172.20.10.2:5000/predict'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(predictionRequest),
       );
