@@ -87,7 +87,7 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - images/HomePage/
-    - assets/credentials/smsecure-c5f3c87a3965.json
+    - assets/credentials/smsecure-c19e8e1aa9d1.json
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see

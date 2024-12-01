@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart';
 import 'package:smsecure/Pages/Login/ForgotPassword/ForgotPasswordOTP.dart';
 
 class ForgotpasswordLogin extends StatefulWidget {
@@ -61,6 +64,62 @@ class _ForgotpasswordLoginState extends State<ForgotpasswordLogin> {
           .get();
 
       if (querySnapshot.docs.isNotEmpty) {
+        // Check if user is banned
+        if (querySnapshot.docs.first.get('isBanned') == true) {
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext context) {
+              return WillPopScope(
+                onWillPop: () async => false,
+                child: AlertDialog(
+                  title: const Text(
+                    'Account Banned',
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  content: const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.block,
+                        color: Colors.red,
+                        size: 48,
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        'Your account has been banned due to malicious behavior.\n\n'
+                        'The application will now close.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
+                  actions: <Widget>[
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('OK'),
+                      onPressed: () {
+                        if (Platform.isAndroid) {
+                          SystemNavigator.pop();
+                        } else if (Platform.isIOS) {
+                          exit(0);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+          return;
+        }
+
         // Phone number exists, navigate to ForgotPasswordOTPLogin.dart
         await _showMessageDialog(context, 'Phone Number Found',
             'We found your phone number. Proceeding to OTP verification...',

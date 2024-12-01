@@ -129,7 +129,7 @@ class PushNotificationService {
       'message': {
         'token': deviceToken,
         'notification': {
-          'title': 'App Name',
+          'title': 'Smsecure',
           'body': message,
         },
         'android': {

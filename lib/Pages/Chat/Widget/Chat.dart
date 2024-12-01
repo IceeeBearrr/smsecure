@@ -11,10 +11,13 @@ final translationService = GoogleTranslationService();
 
 Future<void> setupTranslationService() async {
   try {
+      print("Initializing translation service...");
     await translationService
-        .initialize('assets/credentials/smsecure-c5f3c87a3965.json');
+        .initialize('assets/credentials/smsecure-c19e8e1aa9d1.json');
     print("Translation service initialized successfully.");
-  } catch (e) {
+    } on PlatformException catch (e) {
+    print("PlatformException initializing translation service: ${e.message}");
+  } on Exception catch (e) {
     print("Error initializing translation service: $e");
   }
 }

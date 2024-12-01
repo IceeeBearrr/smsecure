@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -12,6 +14,7 @@ import 'package:http/http.dart' as http;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:smsecure/Pages/Home/push_notification_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:smsecure/Pages/UserBanService.dart';
 
 const MethodChannel smsChannel = MethodChannel("com.smsecure.app/sms");
 
@@ -895,7 +898,7 @@ Future<void> backgroundMessageHandler(CustomSmsMessage message) async {
         messageContent:
             "${message.messageBody} (Message is allowed due to Custom Filter)",
       );
-      
+
       PushNotificationService.sendForegroundNotification(
         title: senderName,
         body: "${message.messageBody} (Message is allowed due to Custom Filter",
@@ -1259,6 +1262,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       PushNotificationService();
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
+  StreamSubscription<DocumentSnapshot>? _banStatusSubscription;
 
   bool _permissionsGranted = false;
   bool _isLoading = true;
@@ -1268,15 +1272,94 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   int spamContactCount = 0;
   int totalContactCount = 0;
 
+  Future<void> _checkBanStatus() async {
+    try {
+      String? phone = await secureStorage.read(key: 'userPhone');
+      if (phone != null) {
+        // Initial check
+        QuerySnapshot userSnapshot = await FirebaseFirestore.instance
+            .collection('smsUser')
+            .where('phoneNo', isEqualTo: phone)
+            .limit(1)
+            .get();
+
+        if (userSnapshot.docs.isNotEmpty &&
+            userSnapshot.docs.first.get('isBanned') == true &&
+            mounted) {
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext context) {
+              return WillPopScope(
+                onWillPop: () async => false,
+                child: AlertDialog(
+                  title: const Text(
+                    'Account Banned',
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  content: const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.block,
+                        color: Colors.red,
+                        size: 48,
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        'Your account has been banned due to malicious behavior.\n\n'
+                        'The application will now close.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
+                  actions: <Widget>[
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('OK'),
+                      onPressed: () async {
+                        // Clear stored credentials
+                        await secureStorage.deleteAll();
+
+                        // Close the app
+                        if (Platform.isAndroid) {
+                          SystemNavigator.pop();
+                        } else if (Platform.isIOS) {
+                          exit(0);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        }
+
+        // Start real-time monitoring
+        UserBanService.startMonitoringBanStatus(phone, context);
+      }
+    } catch (e) {
+      print("Error setting up ban status listener: $e");
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initialize();
     _initializeSmsListener();
-    _setupFirebaseForegroundHandler();
     _initializeLocalNotifications();
     _fetchStats();
+    _checkBanStatus();
 
     // Listen for foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
@@ -1312,21 +1395,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     flutterLocalNotificationsPlugin.initialize(initializationSettings);
   }
 
-  void _setupFirebaseForegroundHandler() {
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      if (message.notification != null) {
-        print(
-            'Foreground notification received: ${message.notification?.title}');
-        _showLocalNotification(message.notification);
-      }
-    });
-
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      print('Notification tapped: ${message.notification?.title}');
-      // Handle what happens when the user taps on the notification
-    });
-  }
-
   Future<void> _showLocalNotification(RemoteNotification? notification) async {
     if (notification == null) return;
 
@@ -1353,6 +1421,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     pollTimer?.cancel();
+    _banStatusSubscription?.cancel();
     super.dispose();
   }
 
@@ -1370,13 +1439,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
 
-    // Run the default SMS handler check and wait for acceptance
-    bool isDefaultSet = await _checkAndSetDefaultSmsAppWithLoading();
-    if (!isDefaultSet) return; // Stop if not set as default
-
-    // Load userPhone from secure storage
-    await _loadUserPhone();
-
     // Check permissions
     bool permissionsGranted = await _checkAndRequestPermissions();
     if (!permissionsGranted) {
@@ -1384,6 +1446,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           "SMS and Contacts permissions are required to use this app.");
       return;
     }
+
+    // Only check default SMS app if permissions are granted
+    bool isDefaultSet = await _checkAndSetDefaultSmsAppWithLoading();
+    if (!isDefaultSet) {
+      SystemNavigator.pop(); // Close the app if not set as default
+      return;
+    }
+
+    // Load userPhone from secure storage
+    await _loadUserPhone();
 
     // Start imports and display loading only if both conditions are met
     if (permissionsGranted && isDefaultSet && mounted) {
@@ -1446,16 +1518,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<bool> _checkAndSetDefaultSmsAppWithLoading() async {
     try {
-      print("Checking if app is the default SMS handler"); // Debugging line
+      print("Checking if app is the default SMS handler");
       final bool? isDefault =
           await platform.invokeMethod<bool?>('checkDefaultSms');
       if (isDefault != null && !isDefault) {
-        print(
-            "App is not the default SMS handler, showing dialog"); // Debugging line
+        print("App is not the default SMS handler, showing dialog");
         bool userAccepted = await _showDefaultSmsDialog();
         return userAccepted;
       } else {
-        print("App is already the default SMS handler"); // Debugging line
+        print("App is already the default SMS handler");
         return true;
       }
     } catch (e) {
@@ -1492,7 +1563,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   "This app needs to be set as your default SMS handler to continue.");
               userAccepted = false; // User did not accept
             },
-            child: const Text('Cancel'),
+            child: const Text('Close App'),
           ),
         ],
       ),
@@ -1514,20 +1585,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           await telephony.requestPhoneAndSmsPermissions ?? false;
 
       if (smsPermissionGranted) {
-        _permissionsGranted = true;
-        final isImported =
-            await secureStorage.read(key: 'isMessagesImported') ?? 'false';
-        if (isImported != 'true') {
-          await _importSmsMessages();
-          await secureStorage.write(key: 'isMessagesImported', value: 'true');
+        bool contactsPermissionGranted =
+            await FlutterContacts.requestPermission();
+
+        if (contactsPermissionGranted) {
+          _permissionsGranted = true;
+          return true;
+        } else {
+          _permissionsGranted = false;
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Contacts permission denied')),
+            );
+          }
+          return false;
         }
-        return true;
       } else {
         _permissionsGranted = false;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('SMS, Phone, or Contacts permissions denied')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('SMS and Phone permissions denied')),
+          );
+        }
         return false;
       }
     } catch (e) {

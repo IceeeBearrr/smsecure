@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart';
 import 'package:smsecure/Pages/SignUp/OtpVerificationSignUp.dart';
 
 class Signup extends StatefulWidget {
@@ -35,36 +38,103 @@ class _SignupState extends State<Signup> {
       final phone = phoneController.text.trim();
       final password = passwordController.text;
 
-      // Check if the phone number or email already exists in Firestore
-      final QuerySnapshot emailCheck = await FirebaseFirestore.instance
-          .collection('smsUser')
-          .where('emailAddress', isEqualTo: email)
-          .get();
+      try {
+        final QuerySnapshot phoneCheck = await FirebaseFirestore.instance
+            .collection('smsUser')
+            .where('phoneNo', isEqualTo: phone)
+            .get();
 
-      final QuerySnapshot phoneCheck = await FirebaseFirestore.instance
-          .collection('smsUser')
-          .where('phoneNo', isEqualTo: phone)
-          .get();
+        if (phoneCheck.docs.isNotEmpty) {
+          if (phoneCheck.docs.first.get('isBanned') == true) {
+            await showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (BuildContext context) {
+                return WillPopScope(
+                  onWillPop: () async => false,
+                  child: AlertDialog(
+                    title: const Text(
+                      'Account Banned',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    content: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.block,
+                          color: Colors.red,
+                          size: 48,
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          'This phone number has been banned due to malicious behavior.\n\n'
+                          'The application will now close.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      ],
+                    ),
+                    actions: <Widget>[
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('OK'),
+                        onPressed: () {
+                          if (Platform.isAndroid) {
+                            SystemNavigator.pop();
+                          } else if (Platform.isIOS) {
+                            exit(0);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+            return;
+          } else {
+            _showErrorDialog(
+                'An account with this phone number already exists.');
+            return;
+          }
+        }
 
-      if (emailCheck.docs.isNotEmpty || phoneCheck.docs.isNotEmpty) {
-        _showErrorDialog(
-            'An account with this email or phone number already exists.');
-        Future.delayed(const Duration(seconds: 2), () {
-          Navigator.pop(context); // Redirect to the login page
-        });
-      } else {
-        // Proceed to OTP verification if no existing account was found
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => OtpVerificationSignUp(
-              name: name,
-              email: email,
-              phone: phone,
-              password: password,
+
+        // Check if the phone number or email already exists in Firestore
+        final QuerySnapshot emailCheck = await FirebaseFirestore.instance
+            .collection('smsUser')
+            .where('emailAddress', isEqualTo: email)
+            .get();
+            
+        if (emailCheck.docs.isNotEmpty || phoneCheck.docs.isNotEmpty) {
+          _showErrorDialog(
+              'An account with this email or phone number already exists.');
+          Future.delayed(const Duration(seconds: 2), () {
+            Navigator.pop(context); // Redirect to the login page
+          });
+        } else {
+          // Proceed to OTP verification if no existing account was found
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => OtpVerificationSignUp(
+                name: name,
+                email: email,
+                phone: phone,
+                password: password,
+              ),
             ),
-          ),
-        );
+          );
+        }
+      } catch (e) {
+        _showErrorDialog('An error occurred. Please try again later.');
+        print("Error: $e");
       }
     }
   }
@@ -342,8 +412,9 @@ class _SignupState extends State<Signup> {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your phone number';
                         }
-                        if (!RegExp(r'^\+60\d{9,10}$').hasMatch(value)) {
-                          return 'Please enter in the format +60123456789';
+                        final phoneRegex = RegExp(r'^\+601[0-9]{8,9}$');
+                        if (!phoneRegex.hasMatch(value)) {
+                          return 'Please enter a valid phone number (e.g., +601155050925)';
                         }
                         return null;
                       },

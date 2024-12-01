@@ -30,7 +30,7 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
-
+assets/credentials/smsecure-c19e8e1aa9d1.json
 # Symbolication related
 app.*.symbols
 
